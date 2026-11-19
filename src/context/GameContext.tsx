@@ -334,11 +334,12 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       activeMessage: `🎲 ¡${activePlayer.name} tira el dado y saca un ${totalSteps}!`,
     }));
 
-    // 2. Animate step-by-step hopping
+    // 2. Animate smooth continuous spline movement
     setTimeout(() => {
-      let stepCount = 0;
-      let curSpace = activePlayer.spaceIndex;
+      const startTime = Date.now();
+      const durationMs = totalSteps * 450;
       const finalSpace = (activePlayer.spaceIndex + totalSteps) % 20;
+      const completedLaps = Math.floor((activePlayer.spaceIndex + totalSteps) / 20);
 
       updateAndBroadcastState((prev) => ({
         ...prev,
@@ -347,58 +348,41 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           playerId: activePlayer.id,
           fromSpace: activePlayer.spaceIndex,
           toSpace: finalSpace,
-          currentSpace: curSpace,
+          currentSpace: activePlayer.spaceIndex,
           stepIndex: 0,
           totalSteps,
+          startTime,
+          durationMs,
         },
+        activeMessage: `🏃 ¡${activePlayer.name} avanza con fluidez por la Senda Arcoíris (${totalSteps} casillas)!`,
       }));
 
-      if (activeMovementTimer.current) clearInterval(activeMovementTimer.current);
+      if (activeMovementTimer.current) clearTimeout(activeMovementTimer.current);
 
-      activeMovementTimer.current = setInterval(() => {
-        stepCount++;
-        curSpace = (curSpace + 1) % 20;
-        sounds.playJump();
-
-        const completedLap = curSpace === 0;
-        if (completedLap) {
-          sounds.playStarFanfare();
-        }
-
+      activeMovementTimer.current = setTimeout(() => {
+        // Finalize player position and lap progress
         updateAndBroadcastState((prev) => {
           const updatedPlayers = prev.players.map((p) => {
             if (p.id !== activePlayer.id) return p;
             return {
               ...p,
-              spaceIndex: curSpace,
-              lap: completedLap ? p.lap + 1 : p.lap,
-              stars: completedLap ? p.stars + 1 : p.stars,
+              spaceIndex: finalSpace,
+              lap: p.lap + completedLaps,
+              stars: p.stars + completedLaps,
             };
           });
 
           return {
             ...prev,
             players: updatedPlayers,
-            movement: {
-              playerId: activePlayer.id,
-              fromSpace: activePlayer.spaceIndex,
-              toSpace: finalSpace,
-              currentSpace: curSpace,
-              stepIndex: stepCount,
-              totalSteps,
-            },
-            activeMessage: `¡${activePlayer.name} avanza! (Quedan ${totalSteps - stepCount} casillas)`,
           };
         });
 
-        // Landed at destination
-        if (stepCount >= totalSteps) {
-          if (activeMovementTimer.current) clearInterval(activeMovementTimer.current);
-          setTimeout(() => {
-            handleLanding(activePlayer.id, curSpace);
-          }, 350);
-        }
-      }, 340);
+        // Trigger space action at destination
+        setTimeout(() => {
+          handleLanding(activePlayer.id, finalSpace);
+        }, 300);
+      }, durationMs + 100);
     }, 850);
   }, [gameState.players, gameState.activePlayerIndex, gameState.phase, gameState.diceRoll, updateAndBroadcastState, handleLanding]);
 

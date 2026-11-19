@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 
 export const TRACK_SPECS = {
-  width: 15.2,
-  height: 7.8,
-  straightLength: 7.4,
-  radius: 3.9,
+  width: 24.9,
+  height: 12.4,
+  straightLength: 12.5,
+  radius: 6.2,
   laneCount: 6,
-  laneWidth: 0.35,
+  laneWidth: 0.55,
   totalSpaces: 20,
 };
 
@@ -106,16 +106,25 @@ export function getPlayerPositionOnSpace(
   playerIndexOnSpace: number = 0,
   totalPlayersOnSpace: number = 1
 ): THREE.Vector3 {
-  const base = getSpacePosition(spaceIndex, 0.16);
+  const base = getSpacePosition(spaceIndex, 0.12);
 
   if (totalPlayersOnSpace > 1) {
     const angle = (playerIndexOnSpace / totalPlayersOnSpace) * Math.PI * 2 + (spaceIndex * 0.5);
-    const radius = Math.min(0.32, 0.16 + totalPlayersOnSpace * 0.03);
+    const radius = Math.min(0.38, 0.18 + totalPlayersOnSpace * 0.04);
     base.x += Math.cos(angle) * radius;
     base.z += Math.sin(angle) * radius;
   }
 
   return base;
+}
+
+/**
+ * Calculates continuous position and tangent on track given fractional space parameter k
+ * k can be e.g. 3.42 (meaning 42% between space 3 and space 4)
+ */
+export function getContinuousTrackPosition(k: number, laneOffset: number = 0): TrackPoint {
+  const normT = ((k / TRACK_SPECS.totalSpaces) % 1 + 1) % 1;
+  return getTrackPoint(normT, laneOffset);
 }
 
 /**

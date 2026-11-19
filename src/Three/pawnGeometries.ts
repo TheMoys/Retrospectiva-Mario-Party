@@ -19,7 +19,7 @@ export function tryLoadGLTFCharacter(charId: CharacterId, onLoaded: (group: THRE
     modelUrl,
     (gltf) => {
       const model = gltf.scene;
-      model.scale.set(0.65, 0.65, 0.65);
+      model.scale.set(0.38, 0.38, 0.38);
       model.traverse((child) => {
         if ((child as THREE.Mesh).isMesh) {
           child.castShadow = true;
@@ -56,7 +56,7 @@ export function createCharacterPawn(charId: CharacterId, neonColor: string): THR
   sCtx.fillStyle = sGrad;
   sCtx.fillRect(0, 0, 128, 128);
 
-  const shadowGeo = new THREE.PlaneGeometry(1.2, 1.2);
+  const shadowGeo = new THREE.PlaneGeometry(0.72, 0.72);
   const shadowMat = new THREE.MeshBasicMaterial({
     map: new THREE.CanvasTexture(shadowCanvas),
     transparent: true,
@@ -67,8 +67,8 @@ export function createCharacterPawn(charId: CharacterId, neonColor: string): THR
   shadowMesh.position.y = 0.04;
   pawnGroup.add(shadowMesh);
 
-  // 2. Beveled Illuminated Acrylic Pedestal Base
-  const baseGeo = new THREE.CylinderGeometry(0.48, 0.54, 0.12, 32);
+  // 2. Beveled Illuminated Acrylic Pedestal Base (Compact Tabletop Scale)
+  const baseGeo = new THREE.CylinderGeometry(0.28, 0.33, 0.08, 32);
   const baseMat = new THREE.MeshStandardMaterial({
     color: neonColor,
     emissive: neonColor,
@@ -78,23 +78,24 @@ export function createCharacterPawn(charId: CharacterId, neonColor: string): THR
     toneMapped: false,
   });
   const baseMesh = new THREE.Mesh(baseGeo, baseMat);
-  baseMesh.position.y = 0.09;
+  baseMesh.position.y = 0.06;
   baseMesh.castShadow = true;
   baseMesh.receiveShadow = true;
   pawnGroup.add(baseMesh);
 
   // Double perimeter gold rim
-  const rimGeo = new THREE.RingGeometry(0.49, 0.55, 32);
+  const rimGeo = new THREE.RingGeometry(0.29, 0.34, 32);
   const rimMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
   const rimMesh = new THREE.Mesh(rimGeo, rimMat);
   rimMesh.rotation.x = -Math.PI / 2;
-  rimMesh.position.y = 0.155;
+  rimMesh.position.y = 0.102;
   pawnGroup.add(rimMesh);
 
-  // 3. Volumetric 3D Character Body Model (Prominent ~1.6 units scale)
+  // 3. Volumetric 3D Character Body Model (Harmoniously scaled ~1.04 units)
   const charBodyGroup = new THREE.Group();
   charBodyGroup.name = 'char_body_group';
-  charBodyGroup.position.y = 0.16;
+  charBodyGroup.position.y = 0.09;
+  charBodyGroup.scale.set(0.62, 0.62, 0.62);
 
   // Build character-specific 3D geometry
   switch (charId) {

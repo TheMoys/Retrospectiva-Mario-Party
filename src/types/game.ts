@@ -114,6 +114,8 @@ export interface MovementState {
   currentSpace: number;
   stepIndex: number;
   totalSteps: number;
+  startTime?: number;
+  durationMs?: number;
 }
 
 export interface TargetRouletteState {

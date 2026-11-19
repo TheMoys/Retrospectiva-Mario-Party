@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { GameState, Player } from '@/types/game';
 import { BOARD_SPACES } from '@/constants/boardSpaces';
 import { CHARACTERS } from '@/constants/characters';
+import { sounds } from '@/audio/soundEffects';
 import {
   getTrackPoint,
   getSpacePosition,
@@ -29,6 +30,11 @@ const RAINBOW_LANES = [
 
 export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
   const mountRef = useRef<HTMLDivElement>(null);
+  const gameStateRef = useRef<GameState>(gameState);
+  useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
+
   const [screenLabels, setScreenLabels] = useState<Array<{
     id: string;
     name: string;
@@ -56,6 +62,12 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
   const questionBlocksRef = useRef<THREE.Mesh[]>([]);
   const piranhasRef = useRef<THREE.Group[]>([]);
   const starBitsRef = useRef<THREE.Points | null>(null);
+  const dustTrailRef = useRef<{
+    mesh: THREE.Points;
+    pos: Float32Array;
+    life: Float32Array;
+  } | null>(null);
+  const lastStepSoundTileRef = useRef<number>(-1);
   const lastLabelsHashRef = useRef<string>('');
 
   // Helper: Create Mario Kart 8 Crystal Grid Texture for Rainbow Road
@@ -353,10 +365,10 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     scene.background = new THREE.Color(0x060714);
     sceneRef.current = scene;
 
-    // 2. Camera (panoramic perspective FOV 38)
-    const camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 1000);
-    camera.position.set(0, 15.5, 13.8);
-    camera.lookAt(0, 0, -0.2);
+    // 2. Camera (Panoramic Perspective FOV 42 framed for 24.9 x 12.4 circuit)
+    const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 1000);
+    camera.position.set(0, 23.5, 20.0);
+    camera.lookAt(0, 0, -0.6);
     cameraRef.current = camera;
 
     // 3. High Quality Renderer
@@ -366,31 +378,44 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.15;
+    renderer.toneMappingExposure = 1.18;
     rendererRef.current = renderer;
 
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
 
-    // 4. Lights
-    const ambientLight = new THREE.AmbientLight(0x38bdf8, 0.85);
+    // 4. Lights with Studio Radiance & Mario Kart Specular Depth
+    const ambientLight = new THREE.AmbientLight(0x38bdf8, 0.75);
     scene.add(ambientLight);
 
+    const hemiLight = new THREE.HemisphereLight(0xdbeafe, 0x1e1b4b, 0.65);
+    scene.add(hemiLight);
+
     const mainSun = new THREE.DirectionalLight(0xffffff, 2.2);
-    mainSun.position.set(5, 18, 10);
+    mainSun.position.set(8, 24, 12);
     mainSun.castShadow = true;
     mainSun.shadow.mapSize.width = 2048;
     mainSun.shadow.mapSize.height = 2048;
-    mainSun.shadow.bias = -0.0005;
+    mainSun.shadow.bias = -0.0003;
+    mainSun.shadow.camera.near = 0.5;
+    mainSun.shadow.camera.far = 60;
+    mainSun.shadow.camera.left = -16;
+    mainSun.shadow.camera.right = 16;
+    mainSun.shadow.camera.top = 16;
+    mainSun.shadow.camera.bottom = -16;
     scene.add(mainSun);
 
-    const magentaRim = new THREE.PointLight(0xd946ef, 3.5, 35);
-    magentaRim.position.set(-10, 6, -8);
+    const magentaRim = new THREE.PointLight(0xd946ef, 4.0, 50);
+    magentaRim.position.set(-16, 8, -12);
     scene.add(magentaRim);
 
-    const cyanRim = new THREE.PointLight(0x06b6d4, 3.5, 35);
-    cyanRim.position.set(10, 6, 8);
+    const cyanRim = new THREE.PointLight(0x06b6d4, 4.0, 50);
+    cyanRim.position.set(16, 8, 12);
     scene.add(cyanRim);
+
+    const starCenterLight = new THREE.PointLight(0xfacc15, 2.5, 18);
+    starCenterLight.position.set(0, 2.6, 0);
+    scene.add(starCenterLight);
 
     // 5. SUPER MARIO GALAXY COSMIC BACKGROUND
     // 5A. 2,500 Chromatic Stars
@@ -501,9 +526,9 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     starBitsRef.current = starBitsMesh;
 
     // 6. BUILD AUTHENTIC 6-LANE RAINBOW ROAD (SENDA ARCOÍRIS)
-    const samples = 360;
+    const samples = 480;
     const laneCount = 6;
-    const laneWidth = 0.38; // Total width = 2.28
+    const laneWidth = 0.55; // Total width = 3.30
     const halfTotalWidth = (laneCount * laneWidth) / 2;
     const crystalTex = createCrystalGridTexture();
 
@@ -531,7 +556,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
         verts.push(ptOut.position.x, 0.02, ptOut.position.z);
 
         norms.push(0, 1, 0, 0, 1, 0);
-        uvs.push(0, t * 40, 1, t * 40);
+        uvs.push(0, t * 55, 1, t * 55);
 
         if (i < samples) {
           const r1 = i * 2;
@@ -583,7 +608,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     }
 
     // 6C. Metallic Gold Chrome Curbs with Neon Glow Rails
-    const rails = [-halfTotalWidth - 0.05, halfTotalWidth + 0.05];
+    const rails = [-halfTotalWidth - 0.08, halfTotalWidth + 0.08];
     rails.forEach((railOffset, idx) => {
       const railGeo = new THREE.BufferGeometry();
       const railVerts: number[] = [];
@@ -592,7 +617,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
       for (let i = 0; i <= samples; i++) {
         const t = i / samples;
         const pt = getTrackPoint(t, railOffset);
-        const outerPt = getTrackPoint(t, railOffset + (idx === 0 ? -0.15 : 0.15));
+        const outerPt = getTrackPoint(t, railOffset + (idx === 0 ? -0.18 : 0.18));
 
         railVerts.push(pt.position.x, 0.12, pt.position.z);
         railVerts.push(outerPt.position.x, 0.01, outerPt.position.z);
@@ -626,8 +651,8 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     const ugIndices: number[] = [];
     for (let i = 0; i <= samples; i++) {
       const t = i / samples;
-      const ptIn = getTrackPoint(t, -halfTotalWidth - 0.2);
-      const ptOut = getTrackPoint(t, halfTotalWidth + 0.2);
+      const ptIn = getTrackPoint(t, -halfTotalWidth - 0.25);
+      const ptOut = getTrackPoint(t, halfTotalWidth + 0.25);
       ugVerts.push(ptIn.position.x, -0.05, ptIn.position.z);
       ugVerts.push(ptOut.position.x, -0.05, ptOut.position.z);
       if (i < samples) {
@@ -655,8 +680,8 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
       const spaceGroup = new THREE.Group();
       spaceGroup.position.copy(pos);
 
-      // Base cylinder
-      const cylGeo = new THREE.CylinderGeometry(0.55, 0.58, 0.06, 24);
+      // Base cylinder (Proportioned for spacious 24.9 x 12.4 circuit)
+      const cylGeo = new THREE.CylinderGeometry(0.65, 0.70, 0.06, 28);
       const cylMat = new THREE.MeshStandardMaterial({
         color: space.colorHex,
         emissive: space.neonHex,
@@ -671,7 +696,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
 
       // Top decal
       const iconTex = createSpaceIconTexture(space.type, space.colorHex, space.neonHex);
-      const topPlateGeo = new THREE.CircleGeometry(0.51, 24);
+      const topPlateGeo = new THREE.CircleGeometry(0.60, 28);
       const topPlateMat = new THREE.MeshBasicMaterial({ map: iconTex, transparent: true });
       const topPlateMesh = new THREE.Mesh(topPlateGeo, topPlateMat);
       topPlateMesh.rotation.x = -Math.PI / 2;
@@ -679,7 +704,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
       spaceGroup.add(topPlateMesh);
 
       // White perimeter rim
-      const ringGeo = new THREE.RingGeometry(0.52, 0.60, 24);
+      const ringGeo = new THREE.RingGeometry(0.61, 0.70, 28);
       const ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
       const ringMesh = new THREE.Mesh(ringGeo, ringMat);
       ringMesh.rotation.x = -Math.PI / 2;
@@ -695,7 +720,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     starMeshRef.current = superStar;
 
     // Glowing white circular floor halo
-    const floorRingGeo = new THREE.RingGeometry(2.2, 2.38, 64);
+    const floorRingGeo = new THREE.RingGeometry(2.6, 2.82, 64);
     const floorRingMat = new THREE.MeshBasicMaterial({
       color: 0x93c5fd,
       side: THREE.DoubleSide,
@@ -710,8 +735,8 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
 
     // 9. TWO AUTHENTIC WARP PIPES WITH ANIMATED PIRANHA PLANTS
     const pipeConfigs = [
-      { x: -5.8, z: 0.2, color: 0x22c55e, rimColor: 0x16a34a }, // Green Left
-      { x: 5.8, z: -0.2, color: 0x06b6d4, rimColor: 0x0891b2 }, // Cyan Right
+      { x: -5.6, z: 0.4, color: 0x22c55e, rimColor: 0x16a34a }, // Green Left
+      { x: 5.6, z: -0.4, color: 0x06b6d4, rimColor: 0x0891b2 }, // Cyan Right
     ];
     piranhasRef.current = [];
 
@@ -724,7 +749,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
       if (piranhaHead) piranhasRef.current.push(piranhaHead);
     });
 
-    // 10. FOUR FLOATING GOLDEN '?' BLOCKS
+    // 10. SIX FLOATING GOLDEN '?' BLOCKS
     const qTex = createQuestionBlockTexture();
     const qMaterials = Array(6).fill(new THREE.MeshStandardMaterial({
       map: qTex,
@@ -735,10 +760,12 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     }));
     const qBlockGeo = new THREE.BoxGeometry(0.72, 0.72, 0.72);
     const qBlockPositions = [
-      { x: -3.4, y: 1.8, z: -3.8 },
-      { x: 0, y: 1.8, z: -4.4 },
-      { x: 3.4, y: 1.8, z: -3.8 },
-      { x: 0, y: 1.8, z: 4.4 },
+      { x: -4.2, y: 2.2, z: -2.8 },
+      { x: 0, y: 2.5, z: -3.8 },
+      { x: 4.2, y: 2.2, z: -2.8 },
+      { x: -4.2, y: 2.2, z: 2.8 },
+      { x: 0, y: 2.5, z: 3.8 },
+      { x: 4.2, y: 2.2, z: 2.8 },
     ];
     questionBlocksRef.current = [];
 
@@ -751,7 +778,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     });
 
     // 11. ACTIVE TURN SPOTLIGHT RING (UNDER ACTIVE PLAYER FEET)
-    const activeRingGeo = new THREE.RingGeometry(0.48, 0.62, 32);
+    const activeRingGeo = new THREE.RingGeometry(0.42, 0.56, 32);
     const activeRingMat = new THREE.MeshBasicMaterial({
       color: 0xfacc15,
       side: THREE.DoubleSide,
@@ -764,6 +791,28 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     scene.add(activeSpotlight);
     activeSpotlightRef.current = activeSpotlight;
 
+    // 12. RUNNING STAR DUST PARTICLES (EMITTED DURING MOVEMENT)
+    const dustCount = 45;
+    const dustGeo = new THREE.BufferGeometry();
+    const dustPos = new Float32Array(dustCount * 3);
+    const dustLife = new Float32Array(dustCount);
+    for (let i = 0; i < dustCount; i++) {
+      dustPos[i * 3 + 1] = -100; // Hidden initially
+      dustLife[i] = 0;
+    }
+    dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
+    const dustMat = new THREE.PointsMaterial({
+      size: 0.38,
+      color: 0xfde047,
+      transparent: true,
+      opacity: 0.85,
+      blending: THREE.AdditiveBlending,
+    });
+    const dustMesh = new THREE.Points(dustGeo, dustMat);
+    dustMesh.visible = false;
+    scene.add(dustMesh);
+    dustTrailRef.current = { mesh: dustMesh, pos: dustPos, life: dustLife };
+
     // Window Resize with Dynamic FOV (Prevents cramping in split-screen/demo mode)
     const handleResize = () => {
       if (!container || !camera || !renderer) return;
@@ -771,7 +820,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
       const h = container.clientHeight;
       const aspect = w / h;
       camera.aspect = aspect;
-      camera.fov = aspect < 1.65 ? Math.min(Math.max(38 * (1.65 / aspect), 38), 54) : 38;
+      camera.fov = aspect < 1.65 ? Math.min(Math.max(42 * (1.65 / aspect), 42), 56) : 42;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
     };
@@ -784,10 +833,13 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     const animate = () => {
       animFrameId.current = requestAnimationFrame(animate);
       const elapsedTime = clock.getElapsedTime();
+      const currentGameState = gameStateRef.current;
+      const movement = currentGameState.movement;
+      const isMovingPhase = currentGameState.phase === 'moving' && movement != null;
 
       // 1. Super Star: Upright floating + majestic continuous rotation
       if (starMeshRef.current) {
-        starMeshRef.current.position.y = 1.35 + Math.sin(elapsedTime * 2.2) * 0.18;
+        starMeshRef.current.position.y = 1.45 + Math.sin(elapsedTime * 2.2) * 0.18;
         starMeshRef.current.rotation.y = elapsedTime * 0.85;
       }
 
@@ -800,7 +852,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
       // 3. Question Blocks: Floating & rotating
       questionBlocksRef.current.forEach((block, idx) => {
         block.rotation.y = elapsedTime * 1.2 + idx * 0.8;
-        block.position.y = 1.8 + Math.sin(elapsedTime * 2.5 + idx) * 0.12;
+        block.position.y = 2.2 + Math.sin(elapsedTime * 2.5 + idx) * 0.14;
       });
 
       // 4. Piranha Plants: Smoothly bobbing in and out of warp pipes
@@ -817,20 +869,117 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
 
       // 6. Active player spotlight ring pulsation
       if (activeSpotlightRef.current) {
-        const pulse = 1 + Math.sin(elapsedTime * 5) * 0.15;
+        const pulse = 1 + Math.sin(elapsedTime * 5) * 0.12;
         activeSpotlightRef.current.scale.set(pulse, pulse, 1);
       }
 
-      // 7. 3D Volumetric Characters Idle Bobbing
+      // 7. Dynamic Continuous Spline Pawn Movement & 60 FPS Interpolation
       pawnsMapRef.current.forEach((pawn, playerId) => {
-        const isMoving = gameState.phase === 'moving' && gameState.movement?.playerId === playerId;
-        if (!isMoving) {
+        const isThisPawnMoving = isMovingPhase && movement.playerId === playerId;
+
+        if (isThisPawnMoving) {
+          const startTime = movement.startTime || Date.now();
+          const duration = movement.durationMs || (movement.totalSteps * 450);
+          const elapsed = Date.now() - startTime;
+          const tau = Math.min(1.0, Math.max(0.0, elapsed / duration));
+
+          // Quintic Hermite smootherstep easing curve
+          const eased = tau * tau * tau * (tau * (tau * 6 - 15) + 10);
+          const continuousK = movement.fromSpace + eased * movement.totalSteps;
+
+          // Compute exact position and tangent on track
+          const u = ((continuousK / TRACK_SPECS.totalSpaces) % 1 + 1) % 1;
+          const pt = getTrackPoint(u, 0);
+
+          // Running cadence bounce: joyful parabolic hop for each tile
+          const fractionalStep = continuousK % 1;
+          const hopY = Math.sin(fractionalStep * Math.PI) * 0.36;
+
+          pawn.position.set(pt.position.x, 0.06 + hopY, pt.position.z);
+
+          // Tangent yaw orientation (face along circuit direction)
+          const targetYaw = Math.atan2(pt.tangent.x, pt.tangent.z);
+          let diff = targetYaw - pawn.rotation.y;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          pawn.rotation.y += diff * 0.28;
+
+          // Dynamic banking roll on curves
+          const isCurving = Math.abs(pt.tangent.z) > 0.05;
+          const bankingRoll = isCurving ? (pt.tangent.z > 0 ? 0.12 : -0.12) : 0;
+          pawn.rotation.z += (bankingRoll - pawn.rotation.z) * 0.22;
+
+          // Squash & stretch cartoon physics on character body
           const charBody = pawn.getObjectByName('char_body_group');
           if (charBody) {
-            charBody.position.y = 0.16 + Math.sin(elapsedTime * 3.0 + playerId.charCodeAt(0)) * 0.03;
+            const stretch = 1.0 + Math.sin(fractionalStep * Math.PI) * 0.14;
+            const squash = 1.0 - Math.sin(fractionalStep * Math.PI) * 0.07;
+            charBody.scale.set(0.62 * squash, 0.62 * stretch, 0.62 * squash);
+          }
+
+          // Step sound and lap fanfare
+          const currentStepFloor = Math.floor(continuousK);
+          if (currentStepFloor !== lastStepSoundTileRef.current) {
+            lastStepSoundTileRef.current = currentStepFloor;
+            sounds.playJump();
+            if (currentStepFloor > movement.fromSpace && currentStepFloor % 20 === 0) {
+              sounds.playStarFanfare();
+            }
+          }
+
+          // Emit star dust puff behind runner
+          if (dustTrailRef.current && Math.random() < 0.65) {
+            const { pos, life, mesh } = dustTrailRef.current;
+            for (let i = 0; i < 45; i++) {
+              if (life[i] <= 0) {
+                pos[i * 3] = pt.position.x + (Math.random() - 0.5) * 0.25;
+                pos[i * 3 + 1] = 0.08 + Math.random() * 0.2;
+                pos[i * 3 + 2] = pt.position.z + (Math.random() - 0.5) * 0.25;
+                life[i] = 1.0;
+                break;
+              }
+            }
+            mesh.geometry.attributes.position.needsUpdate = true;
+          }
+        } else {
+          // Idle state: restore vertical posture and gentle bobbing
+          pawn.rotation.z += (0 - pawn.rotation.z) * 0.15;
+          const charBody = pawn.getObjectByName('char_body_group');
+          if (charBody) {
+            charBody.scale.set(0.62, 0.62, 0.62);
+            charBody.position.y = 0.09 + Math.sin(elapsedTime * 3.0 + playerId.charCodeAt(0)) * 0.025;
           }
         }
       });
+
+      // Update star dust decay
+      if (dustTrailRef.current) {
+        const { pos, life, mesh } = dustTrailRef.current;
+        let anyAlive = false;
+        for (let i = 0; i < 45; i++) {
+          if (life[i] > 0) {
+            life[i] -= 0.045;
+            pos[i * 3 + 1] += 0.015;
+            anyAlive = true;
+          } else {
+            pos[i * 3 + 1] = -100;
+          }
+        }
+        mesh.visible = anyAlive;
+        if (anyAlive) {
+          mesh.geometry.attributes.position.needsUpdate = true;
+        }
+      }
+
+      // Update active spotlight position to track active player
+      const activePlayer = currentGameState.players[currentGameState.activePlayerIndex];
+      if (activePlayer && activeSpotlightRef.current) {
+        const activePawn = pawnsMapRef.current.get(activePlayer.id);
+        if (activePawn) {
+          activeSpotlightRef.current.position.set(activePawn.position.x, 0.045, activePawn.position.z);
+          activeSpotlightRef.current.visible = true;
+        }
+      }
 
       // Render
       renderer.render(scene, camera);
@@ -850,6 +999,10 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
       container.innerHTML = '';
       pawnsMapRef.current.forEach((pawn) => scene.remove(pawn));
       pawnsMapRef.current.clear();
+      if (dustTrailRef.current) {
+        dustTrailRef.current.mesh.geometry.dispose();
+        (dustTrailRef.current.mesh.material as THREE.Material).dispose();
+      }
     };
   }, []);
 
@@ -868,16 +1021,17 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
       color: string;
     }> = [];
 
-    const activePlayer = gameState.players[gameState.activePlayerIndex];
+    const currentGameState = gameStateRef.current;
+    const activePlayer = currentGameState.players[currentGameState.activePlayerIndex];
 
     pawnsMapRef.current.forEach((pawn, playerId) => {
-      const player = gameState.players.find((p) => p.id === playerId);
+      const player = currentGameState.players.find((p) => p.id === playerId);
       if (!player) return;
 
       const charInfo = CHARACTERS[player.characterId];
       const pos = new THREE.Vector3();
       pawn.getWorldPosition(pos);
-      pos.y += 1.85; // Float directly above the 1.6 volumetric character head
+      pos.y += 1.35; // Float directly above the ~1.04 volumetric character head
 
       pos.project(camera);
 
@@ -893,7 +1047,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
           x,
           y,
           isActive: player.id === activePlayer?.id,
-          isLeader: gameState.starLeaderId === player.id && player.stars > 0,
+          isLeader: currentGameState.starLeaderId === player.id && player.stars > 0,
           color: charInfo?.neonColor || '#facc15',
         });
       }
@@ -951,18 +1105,19 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
         const playerIndexInCluster = cluster.findIndex((p) => p.id === player.id);
         const pos = getPlayerPositionOnSpace(player.spaceIndex, playerIndexInCluster, cluster.length);
         pawn.position.copy(pos);
-      } else {
-        // Positioned along hop trajectory
-        const from = gameState.movement!.currentSpace;
-        const to = (from + 1) % 20;
-        const pos = getHopPosition(from, to, 0.5);
-        pawn.position.copy(pos);
-      }
 
-      // Shield Aura
+        // Face forward along track tangent
+        const t = (player.spaceIndex % 20) / 20;
+        const pt = getTrackPoint(t, 0);
+        pawn.rotation.y = Math.atan2(pt.tangent.x, pt.tangent.z);
+        pawn.rotation.z = 0;
+      }
+      // Note: when isMoving is true, animate() drives position and rotation smoothly at 60 FPS
+
+      // Shield Aura (Proportioned to scaled pawn)
       let shieldMesh = pawn.getObjectByName('shield_aura') as THREE.Mesh;
       if (player.shieldActive && !shieldMesh) {
-        const auraGeo = new THREE.SphereGeometry(0.7, 16, 16);
+        const auraGeo = new THREE.SphereGeometry(0.55, 16, 16);
         const auraMat = new THREE.MeshBasicMaterial({
           color: 0x38bdf8,
           wireframe: true,
@@ -971,7 +1126,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
         });
         shieldMesh = new THREE.Mesh(auraGeo, auraMat);
         shieldMesh.name = 'shield_aura';
-        shieldMesh.position.y = 0.75;
+        shieldMesh.position.y = 0.55;
         pawn.add(shieldMesh);
       } else if (!player.shieldActive && shieldMesh) {
         pawn.remove(shieldMesh);
