@@ -5,7 +5,7 @@ import { CharacterAvatar } from '@/components/Common/CharacterAvatar';
 import { ControllerScreen } from '@/components/Controller/ControllerScreen';
 
 export const PhoneSimulator: React.FC = () => {
-  const { gameState, setMyPlayerId, myPlayerId, rollDice, triggerMinigame, submitRetroCard } = useGame();
+  const { gameState, setMyPlayerId, myPlayerId, rollDice, submitRetroCard } = useGame();
   const [autoFollowTurn, setAutoFollowTurn] = useState<boolean>(true);
 
   const activePlayer = gameState.players[gameState.activePlayerIndex];
@@ -18,27 +18,36 @@ export const PhoneSimulator: React.FC = () => {
   }, [autoFollowTurn, activePlayer, myPlayerId, setMyPlayerId]);
 
   return (
-    <div className="w-full h-full bg-slate-900/90 flex flex-col p-3 shadow-2xl z-30 select-none overflow-hidden">
-      {/* Simulator Control Header */}
+    <div className="w-full h-full bg-slate-900/95 flex flex-col p-3 shadow-2xl z-30 select-none overflow-hidden font-game">
+      {/* 1. Simulator Control Header (Matching Reference Screen) */}
       <div className="mb-2 shrink-0">
-        <div className="flex items-center justify-between mb-1.5">
-          <div className="text-[10px] font-pixel text-yellow-400 uppercase tracking-wider flex items-center gap-1.5">
-            <span>📱</span>
-            <span>JOY-PHONE SIMULADOR</span>
+        <div className="flex items-center justify-between mb-1.5 px-0.5">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-black text-slate-300 uppercase tracking-wider font-pixel flex items-center gap-1">
+              <span>📱</span>
+              <span>MANDO JOY-PHONE</span>
+            </span>
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 text-[9px] font-bold border border-emerald-500/30">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+              <span>EN VIVO</span>
+            </span>
           </div>
-          <label className="flex items-center gap-1.5 cursor-pointer text-xs text-slate-300">
+
+          <label className="flex items-center gap-1.5 cursor-pointer text-xs text-slate-300 hover:text-white transition-colors">
             <input
               type="checkbox"
               checked={autoFollowTurn}
               onChange={(e) => setAutoFollowTurn(e.target.checked)}
-              className="rounded bg-slate-800 text-yellow-500 focus:ring-0"
+              className="rounded bg-slate-800 text-yellow-500 focus:ring-0 cursor-pointer"
             />
-            <span className="text-[10px] font-semibold">Seguir Turno</span>
+            <span className="text-[10px] font-bold text-yellow-400 flex items-center gap-0.5">
+              <span>Auto</span>
+            </span>
           </label>
         </div>
 
-        {/* Player Switcher Bar */}
-        <div className="grid grid-cols-6 gap-1 bg-slate-950 p-1 rounded-xl border border-white/10">
+        {/* 2. 6 Players Switcher Bar */}
+        <div className="grid grid-cols-6 gap-1 bg-slate-950 p-1.5 rounded-2xl border border-white/10 shadow-inner">
           {gameState.players.map((p) => {
             const char = CHARACTERS[p.characterId];
             const isSelected = p.id === myPlayerId;
@@ -51,14 +60,17 @@ export const PhoneSimulator: React.FC = () => {
                   setAutoFollowTurn(false);
                   setMyPlayerId(p.id);
                 }}
-                className={`py-1 rounded-lg flex flex-col items-center justify-center transition-all relative ${
+                className={`py-1 rounded-xl flex flex-col items-center justify-center transition-all relative ${
                   isSelected
-                    ? 'bg-yellow-400/20 border border-yellow-400 shadow-sm scale-105'
-                    : 'hover:bg-slate-800 opacity-60'
+                    ? 'bg-yellow-400/25 border-2 border-yellow-400 shadow-md scale-105'
+                    : 'hover:bg-slate-800/80 opacity-60 hover:opacity-100'
                 }`}
                 title={`${p.name} (${char.name})`}
               >
                 <CharacterAvatar characterId={p.characterId} size="sm" showBorder={false} />
+                <span className="text-[8px] font-black text-white truncate max-w-[42px] mt-0.5">
+                  {p.name}
+                </span>
                 {isTurn && (
                   <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
                 )}
@@ -68,7 +80,7 @@ export const PhoneSimulator: React.FC = () => {
         </div>
       </div>
 
-      {/* Realistic Smartphone Frame Mockup */}
+      {/* 3. Realistic Smartphone Frame Mockup */}
       <div className="flex-1 w-full bg-slate-950 rounded-[34px] p-2 border-[5px] border-slate-700 shadow-2xl relative overflow-hidden flex flex-col ring-1 ring-white/10 min-h-0">
         {/* Dynamic Island / Speaker Notch */}
         <div className="w-20 h-3.5 bg-slate-800 rounded-full mx-auto mb-1 shrink-0 flex items-center justify-center">
@@ -85,31 +97,34 @@ export const PhoneSimulator: React.FC = () => {
         <div className="w-20 h-1 bg-slate-600 rounded-full mx-auto mt-1.5 shrink-0" />
       </div>
 
-      {/* Demo Quick Shortcuts at bottom */}
+      {/* 4. Demo Quick Shortcuts */}
       <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] font-bold shrink-0">
         <button
           onClick={() => rollDice()}
-          className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-400/20 active:scale-95 transition-all text-center flex items-center justify-center gap-1"
+          className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-400/20 active:scale-95 transition-all text-center flex items-center justify-center gap-1 shadow-sm"
         >
           <span>🎲</span>
-          <span>Tirar Dado</span>
+          <span>Tirar Dado Rápido</span>
         </button>
         <button
           onClick={() => {
             if (!myPlayerId) return;
             const me = gameState.players.find((p) => p.id === myPlayerId);
+            const others = gameState.players.filter((p) => p.id !== myPlayerId);
             submitRetroCard({
               playerId: myPlayerId,
-              playerName: me?.name || 'Jugador',
+              playerName: me?.name || 'Alex',
               characterId: me?.characterId || 'mario',
               category: 'seguir',
-              content: '¡Excelente comunicación y ritmo en este sprint!',
+              content: '¡Excelente coordinación y foco de entrega en este sprint!',
+              recipientId: others[0]?.id,
+              recipientName: others[0]?.name,
             });
           }}
-          className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-400/20 active:scale-95 transition-all text-center flex items-center justify-center gap-1"
+          className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-400/20 active:scale-95 transition-all text-center flex items-center justify-center gap-1 shadow-sm"
         >
           <span>⭐</span>
-          <span>+1 Tarjeta Rápida</span>
+          <span>+1 Tarjeta Test</span>
         </button>
       </div>
     </div>

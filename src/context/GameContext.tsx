@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import {
   GameState,
@@ -6,13 +6,16 @@ import {
   CharacterId,
   PowerUpType,
   RetroCard,
+  RetroCategory,
   MinigameType,
   MinigameState,
   GamePhase,
   Trap,
+  ChaosEventType,
+  BonusStarType,
 } from '@/types/game';
 import { BOARD_SPACES } from '@/constants/boardSpaces';
-import { CHARACTERS } from '@/constants/characters';
+import { CHARACTERS, DEFAULT_TEAM_MEMBERS } from '@/constants/characters';
 import { getRandomPowerUp } from '@/constants/powerUps';
 import { getRandomVoteQuestion } from '@/constants/minigames';
 import { sounds } from '@/audio/soundEffects';
@@ -26,15 +29,19 @@ interface GameContextType {
   setIsHost: (isHost: boolean) => void;
   // Game Actions
   createRoom: (code?: string) => string;
-  joinPlayer: (name: string, characterId: CharacterId) => Player;
+  joinPlayer: (name: string, characterId: CharacterId, role?: string) => Player;
   rollDice: (playerId?: string) => void;
   usePowerUp: (playerId: string, powerUp: PowerUpType, targetPlayerId?: string) => void;
+  resolveRoulette: (targetPlayerId: string) => void;
+  resolveChaosEvent: (eventType: ChaosEventType) => void;
   submitRetroCard: (card: Omit<RetroCard, 'id' | 'timestamp'>) => void;
   triggerMinigame: (type: MinigameType) => void;
   submitMinigameTap: (playerId: string) => void;
   submitMinigameVote: (voterId: string, targetId: string) => void;
   finishMinigame: () => void;
   enterPeaje: () => void;
+  submitPeajeCard: (card: Omit<RetroCard, 'id' | 'timestamp'>) => void;
+  spinBonusStar: (playerId: string) => void;
   enterPodium: () => void;
   nextTurn: () => void;
   resetGame: () => void;
@@ -48,26 +55,53 @@ export function generateRoomCode(): string {
   return words[Math.floor(Math.random() * words.length)];
 }
 
+// Generate the 6 official participants matching the Mario Party screenshot
+export const createInitialPlayers = (): Player[] => {
+  return DEFAULT_TEAM_MEMBERS.map((m, idx) => ({
+    id: `player-${idx + 1}`,
+    name: m.name,
+    role: m.role,
+    characterId: m.characterId,
+    stars: 1, // Start with 1 star as in Mario Party reference
+    spaceIndex: 0,
+    lap: 1,
+    medals: { seguir: false, mejorar: false, dejar: false },
+    powerUps: [idx === 0 ? 'shield_star' : getRandomPowerUp()],
+    shieldActive: idx === 0,
+    activeTrapImmunity: false,
+    isConnected: true,
+  }));
+};
+
 export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [myPlayerId, setMyPlayerId] = useState<string>('');
+  const initialPlayers = createInitialPlayers();
+  const [myPlayerId, setMyPlayerId] = useState<string>(initialPlayers[0].id);
   const [isHost, setIsHost] = useState<boolean>(true);
 
   const [gameState, setGameState] = useState<GameState>(() => ({
-    roomCode: generateRoomCode(),
-    phase: 'lobby',
-    players: [],
+    roomCode: 'STAR',
+    phase: 'turn_start',
+    players: initialPlayers,
     activePlayerIndex: 0,
     diceRoll: [1],
     currentTurn: 1,
-    maxTurns: 15,
+    maxTurns: 24, // 4 rounds x 6 players = 24 turns
+    round: 1,
+    totalRounds: 4,
     boardSpaces: BOARD_SPACES,
     traps: [],
     retroCards: [],
     minigame: null,
-    activeMessage: '¡Esperando a que los jugadores se unan con el Joy-Phone!',
+    movement: null,
+    targetRoulette: null,
+    chaosEvent: null,
+    bonusStarWheel: null,
+    activeMessage: '¡Arranca Sprint Party en la Senda Arcoíris! Turno de Alex (Front).',
     starLeaderId: undefined,
     bonusStarsAwarded: false,
   }));
+
+  const activeMovementTimer = useRef<NodeJS.Timeout | null>(null);
 
   // Sync state broadcast if host
   const updateAndBroadcastState = useCallback((updater: (prev: GameState) => GameState) => {
@@ -92,91 +126,33 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   }, []);
 
-  // Listen to network actions
-  useEffect(() => {
-    const unsub = network.onMessage((action) => {
-      switch (action.type) {
-        case 'SYNC_STATE':
-          setGameState(action.state);
-          break;
-
-        case 'JOIN_ROOM':
-          if (network.isHost) {
-            joinPlayer(action.player.name, action.player.characterId);
-          }
-          break;
-
-        case 'ROLL_DICE':
-          rollDice(action.playerId);
-          break;
-
-        case 'USE_POWERUP':
-          usePowerUp(action.playerId, action.powerUp, action.targetPlayerId);
-          break;
-
-        case 'SUBMIT_RETRO_CARD':
-          submitRetroCard(action.card);
-          break;
-
-        case 'SUBMIT_MINIGAME_TAP':
-          submitMinigameTap(action.playerId);
-          break;
-
-        case 'SUBMIT_MINIGAME_VOTE':
-          submitMinigameVote(action.voterId, action.targetId);
-          break;
-
-        case 'NEXT_TURN':
-          nextTurn();
-          break;
-
-        case 'TRIGGER_MINIGAME':
-          triggerMinigame(action.minigameType);
-          break;
-
-        case 'ENTER_PEAJE':
-          enterPeaje();
-          break;
-
-        case 'ENTER_PODIUM':
-          enterPodium();
-          break;
-
-        case 'RESET_GAME':
-          resetGame();
-          break;
-      }
-    });
-
-    return unsub;
-  }, []);
-
   // 1. Create Room
   const createRoom = useCallback((code?: string): string => {
     const newCode = code ? code.toUpperCase() : generateRoomCode();
-    setGameState((prev) => ({
+    updateAndBroadcastState((prev) => ({
       ...prev,
       roomCode: newCode,
-      phase: 'lobby',
-      players: [],
-      activePlayerIndex: 0,
+      phase: 'turn_start',
+      currentTurn: 1,
+      round: 1,
       retroCards: [],
       traps: [],
     }));
     return newCode;
-  }, []);
+  }, [updateAndBroadcastState]);
 
   // 2. Join Player
-  const joinPlayer = useCallback((name: string, characterId: CharacterId): Player => {
+  const joinPlayer = useCallback((name: string, characterId: CharacterId, role?: string): Player => {
     const newPlayer: Player = {
       id: `player-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       name: name.trim() || CHARACTERS[characterId].name,
+      role: role || 'Dev',
       characterId,
-      stars: 0,
+      stars: 1,
       spaceIndex: 0,
       lap: 1,
       medals: { seguir: false, mejorar: false, dejar: false },
-      powerUps: [getRandomPowerUp()], // Start with 1 welcome power-up
+      powerUps: [getRandomPowerUp()],
       shieldActive: false,
       activeTrapImmunity: false,
       isConnected: true,
@@ -185,113 +161,403 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     sounds.playCoin();
 
     updateAndBroadcastState((prev) => {
-      // If character already chosen, replace or add
       const filtered = prev.players.filter((p) => p.characterId !== characterId);
       const updatedPlayers = [...filtered, newPlayer];
 
       return {
         ...prev,
         players: updatedPlayers,
-        activeMessage: `¡${newPlayer.name} (${CHARACTERS[characterId].name}) se ha unido a la pista!`,
+        activeMessage: `¡${newPlayer.name} (${CHARACTERS[characterId].name}) se unió al equipo!`,
       };
     });
 
     return newPlayer;
   }, [updateAndBroadcastState]);
 
-  // 3. Roll Dice & Move
-  const rollDice = useCallback((playerId?: string) => {
-    sounds.playDiceTumble();
-
+  // Handle Space Landing Logic
+  const handleLanding = useCallback((playerId: string, landedIndex: number) => {
     updateAndBroadcastState((prev) => {
-      const activePlayer = prev.players[prev.activePlayerIndex];
-      const targetId = playerId || activePlayer?.id;
-      if (!activePlayer || activePlayer.id !== targetId) return prev;
+      const player = prev.players.find((p) => p.id === playerId);
+      if (!player) return prev;
 
-      // Check if Turbo Mushroom is queued in diceRoll
-      const hasTurbo = prev.diceRoll.length === 2;
-      let roll1 = Math.floor(Math.random() * 6) + 1;
-      let roll2 = Math.floor(Math.random() * 6) + 1;
-
-      // Golden die guarantee 4, 5, 6
-      if (activePlayer.powerUps.includes('golden_die')) {
-        roll1 = Math.floor(Math.random() * 3) + 4; // 4, 5, or 6
-      }
-
-      const currentRolls = hasTurbo ? [roll1, roll2] : [roll1];
-      const totalSteps = currentRolls.reduce((a, b) => a + b, 0);
-
-      // Advance Player along 20-space board
-      const oldIndex = activePlayer.spaceIndex;
-      const newIndex = (oldIndex + totalSteps) % 20;
-      const completedLap = oldIndex + totalSteps >= 20;
-
-      // Check for Banana Trap on landing
-      const hitTrapIndex = prev.traps.findIndex((t) => t.spaceIndex === newIndex);
-      let hitTrap = false;
-      let updatedTraps = prev.traps;
-
-      if (hitTrapIndex !== -1 && !activePlayer.shieldActive) {
-        hitTrap = true;
+      // Check Banana Trap
+      const trapIdx = prev.traps.findIndex((t) => t.spaceIndex === landedIndex);
+      if (trapIdx !== -1 && !player.shieldActive) {
         sounds.playSlip();
-        updatedTraps = prev.traps.filter((_, idx) => idx !== hitTrapIndex);
+        const updatedTraps = prev.traps.filter((_, idx) => idx !== trapIdx);
+        return {
+          ...prev,
+          phase: 'turn_start',
+          movement: null,
+          traps: updatedTraps,
+          activeMessage: `🍌 ¡Ouch! ${player.name} resbaló con un plátano en la casilla ${landedIndex}.`,
+        };
       }
 
-      // Space Type Action
-      const landedSpace = BOARD_SPACES[newIndex];
-      let msg = `¡${activePlayer.name} ha sacado un ${totalSteps}!`;
+      const landedSpace = BOARD_SPACES[landedIndex];
 
-      if (hitTrap) {
-        msg = `¡Ouch! ${activePlayer.name} ha resbalado con una cáscara de plátano en la casilla ${newIndex}.`;
-      } else if (landedSpace.type === 'purple') {
+      // GREEN or YELLOW: Ruleta de Objetivo
+      if (landedSpace.type === 'green' || landedSpace.type === 'yellow') {
+        const category: RetroCategory = landedSpace.type === 'green' ? 'seguir' : 'mejorar';
+        const alreadyHasMedal = player.medals[category];
+
+        const teammates = prev.players.filter((p) => p.id !== player.id);
+        const receivedCountMap: Record<string, number> = {};
+        teammates.forEach((t) => {
+          receivedCountMap[t.id] = prev.retroCards.filter((c) => c.recipientId === t.id).length;
+        });
+
+        // Balanced selection: teammates with fewer received praises
+        const sorted = [...teammates].sort((a, b) => (receivedCountMap[a.id] || 0) - (receivedCountMap[b.id] || 0));
+        const minCount = receivedCountMap[sorted[0]?.id] || 0;
+        const candidates = sorted.filter((t) => (receivedCountMap[t.id] || 0) <= minCount + 1);
+        const chosen = candidates[Math.floor(Math.random() * candidates.length)] || teammates[0];
+
         sounds.playCoin();
-        msg = `¡Casilla Caos! ${activePlayer.name} recibe una sorpresa.`;
-      } else if (landedSpace.type === 'start') {
-        sounds.playStarFanfare();
-        msg = `¡${activePlayer.name} cruza la Meta Salida y gana +1 Estrella extra!`;
-      }
-
-      // Update player
-      const updatedPlayers = prev.players.map((p, idx) => {
-        if (idx !== prev.activePlayerIndex) return p;
-        let newStars = p.stars;
-        if (landedSpace.type === 'start') newStars += 1;
-
-        // Auto grant power up on purple space
-        let newPowerUps = [...p.powerUps];
-        if (landedSpace.type === 'purple' && newPowerUps.length < 2) {
-          newPowerUps.push(getRandomPowerUp());
-        }
 
         return {
-          ...p,
-          spaceIndex: newIndex,
-          lap: completedLap ? p.lap + 1 : p.lap,
-          stars: newStars,
-          powerUps: newPowerUps,
-          shieldActive: completedLap ? false : p.shieldActive, // Shield expires after full lap
+          ...prev,
+          movement: null,
+          phase: 'roulette',
+          targetRoulette: {
+            active: true,
+            spinning: true,
+            category,
+            selectedPlayerId: chosen.id,
+            selectedPlayerName: chosen.name,
+            selectedCharacterId: chosen.characterId,
+            isWildcard: alreadyHasMedal,
+            availableCategories: alreadyHasMedal
+              ? (['seguir', 'mejorar', 'dejar'] as RetroCategory[]).filter((c) => !player.medals[c])
+              : undefined,
+          },
+          activeMessage: `🎯 ¡Ruleta de Objetivo activada para ${player.name}! Girando para seleccionar compañero...`,
         };
-      });
+      }
 
+      // RED: Dejar de Hacer (Al equipo / proceso)
+      if (landedSpace.type === 'red') {
+        sounds.playCoin();
+        const alreadyHasMedal = player.medals.dejar;
+
+        return {
+          ...prev,
+          movement: null,
+          phase: 'space_action',
+          targetRoulette: {
+            active: true,
+            spinning: false,
+            category: 'dejar',
+            isWildcard: alreadyHasMedal,
+            availableCategories: alreadyHasMedal
+              ? (['seguir', 'mejorar', 'dejar'] as RetroCategory[]).filter((c) => !player.medals[c])
+              : undefined,
+          },
+          activeMessage: `🔴 ¡Casilla Roja! ${player.name} aportará una mejora al flujo del equipo.`,
+        };
+      }
+
+      // PURPLE: Evento Caos y Kudos
+      if (landedSpace.type === 'purple') {
+        sounds.playCoin();
+        const events: Array<{ type: ChaosEventType; title: string; desc: string }> = [
+          { type: 'double_kudo', title: '🎁 Kudo Doble', desc: '¡Escribe un elogio con ruleta y ambos ganan +2 Estrellas!' },
+          { type: 'item_box', title: '🎒 Caja de Power-Up', desc: '¡Recibes un objeto sorpresa para tu mochila!' },
+          { type: 'steal_star', title: '🦹 Robo de la Suerte', desc: '¡Le quitas 1 estrella al rival con más estrellas!' },
+          { type: 'swap_pos', title: '🌪️ Intercambio de Posición', desc: '¡Intercambias casilla con otro jugador al azar!' },
+          { type: 'speed_challenge', title: '⚡ Reto Express 15s', desc: '¡Minijuego sorpresa para todo el equipo!' },
+        ];
+        const chosenEvent = events[Math.floor(Math.random() * events.length)];
+
+        // Grant power-up if item box
+        const updatedPlayers = prev.players.map((p) => {
+          if (p.id !== player.id) return p;
+          if (chosenEvent.type === 'item_box' && p.powerUps.length < 2) {
+            return { ...p, powerUps: [...p.powerUps, getRandomPowerUp()] };
+          }
+          return p;
+        });
+
+        return {
+          ...prev,
+          players: updatedPlayers,
+          movement: null,
+          phase: 'chaos_event',
+          chaosEvent: {
+            active: true,
+            spinning: true,
+            eventType: chosenEvent.type,
+            title: chosenEvent.title,
+            description: chosenEvent.desc,
+            resolved: false,
+          },
+          activeMessage: `🟣 ¡Casilla Caos! Sorteando evento sorpresa para ${player.name}...`,
+        };
+      }
+
+      // START SPACE
       return {
         ...prev,
-        phase: hitTrap ? 'turn_start' : 'space_action',
-        diceRoll: currentRolls,
-        players: updatedPlayers,
-        traps: updatedTraps,
-        activeMessage: msg,
+        movement: null,
+        phase: 'turn_start',
+        activeMessage: `🏁 ¡${player.name} pasa por la Salida! Siguiente turno listo.`,
       };
     });
   }, [updateAndBroadcastState]);
 
-  // 4. Use Power-Up
+  // 3. Roll Dice & Step-by-Step Movement
+  const rollDice = useCallback((playerId?: string) => {
+    const activePlayer = gameState.players[gameState.activePlayerIndex];
+    const targetId = playerId || activePlayer?.id;
+    if (!activePlayer || activePlayer.id !== targetId) return;
+    if (gameState.phase !== 'turn_start' && gameState.phase !== 'space_action') return;
+
+    sounds.playDiceTumble();
+
+    const hasTurbo = gameState.diceRoll.length === 2;
+    let roll1 = Math.floor(Math.random() * 6) + 1;
+    let roll2 = Math.floor(Math.random() * 6) + 1;
+
+    // Golden die guarantee 4, 5, or 6
+    if (activePlayer.powerUps.includes('golden_die')) {
+      roll1 = Math.floor(Math.random() * 3) + 4;
+    }
+
+    const currentRolls = hasTurbo ? [roll1, roll2] : [roll1];
+    const totalSteps = currentRolls.reduce((a, b) => a + b, 0);
+
+    // 1. Enter rolling phase
+    updateAndBroadcastState((prev) => ({
+      ...prev,
+      phase: 'rolling',
+      diceRoll: currentRolls,
+      activeMessage: `🎲 ¡${activePlayer.name} tira el dado y saca un ${totalSteps}!`,
+    }));
+
+    // 2. Animate step-by-step hopping
+    setTimeout(() => {
+      let stepCount = 0;
+      let curSpace = activePlayer.spaceIndex;
+      const finalSpace = (activePlayer.spaceIndex + totalSteps) % 20;
+
+      updateAndBroadcastState((prev) => ({
+        ...prev,
+        phase: 'moving',
+        movement: {
+          playerId: activePlayer.id,
+          fromSpace: activePlayer.spaceIndex,
+          toSpace: finalSpace,
+          currentSpace: curSpace,
+          stepIndex: 0,
+          totalSteps,
+        },
+      }));
+
+      if (activeMovementTimer.current) clearInterval(activeMovementTimer.current);
+
+      activeMovementTimer.current = setInterval(() => {
+        stepCount++;
+        curSpace = (curSpace + 1) % 20;
+        sounds.playJump();
+
+        const completedLap = curSpace === 0;
+        if (completedLap) {
+          sounds.playStarFanfare();
+        }
+
+        updateAndBroadcastState((prev) => {
+          const updatedPlayers = prev.players.map((p) => {
+            if (p.id !== activePlayer.id) return p;
+            return {
+              ...p,
+              spaceIndex: curSpace,
+              lap: completedLap ? p.lap + 1 : p.lap,
+              stars: completedLap ? p.stars + 1 : p.stars,
+            };
+          });
+
+          return {
+            ...prev,
+            players: updatedPlayers,
+            movement: {
+              playerId: activePlayer.id,
+              fromSpace: activePlayer.spaceIndex,
+              toSpace: finalSpace,
+              currentSpace: curSpace,
+              stepIndex: stepCount,
+              totalSteps,
+            },
+            activeMessage: `¡${activePlayer.name} avanza! (Quedan ${totalSteps - stepCount} casillas)`,
+          };
+        });
+
+        // Landed at destination
+        if (stepCount >= totalSteps) {
+          if (activeMovementTimer.current) clearInterval(activeMovementTimer.current);
+          setTimeout(() => {
+            handleLanding(activePlayer.id, curSpace);
+          }, 350);
+        }
+      }, 340);
+    }, 850);
+  }, [gameState.players, gameState.activePlayerIndex, gameState.phase, gameState.diceRoll, updateAndBroadcastState, handleLanding]);
+
+  // 4. Resolve Target Roulette
+  const resolveRoulette = useCallback((targetPlayerId: string) => {
+    updateAndBroadcastState((prev) => {
+      if (!prev.targetRoulette) return prev;
+      const target = prev.players.find((p) => p.id === targetPlayerId);
+      sounds.playCoin();
+
+      return {
+        ...prev,
+        phase: 'space_action',
+        targetRoulette: {
+          ...prev.targetRoulette,
+          spinning: false,
+          selectedPlayerId: target?.id,
+          selectedPlayerName: target?.name,
+          selectedCharacterId: target?.characterId,
+        },
+      };
+    });
+  }, [updateAndBroadcastState]);
+
+  // 5. Resolve Chaos Event
+  const resolveChaosEvent = useCallback((eventType: ChaosEventType) => {
+    updateAndBroadcastState((prev) => {
+      const activePlayer = prev.players[prev.activePlayerIndex];
+      let updatedPlayers = [...prev.players];
+      let msg = '';
+
+      if (eventType === 'swap_pos') {
+        const others = updatedPlayers.filter((p) => p.id !== activePlayer.id);
+        const randomTarget = others[Math.floor(Math.random() * others.length)];
+        if (randomTarget) {
+          const tempSpace = activePlayer.spaceIndex;
+          activePlayer.spaceIndex = randomTarget.spaceIndex;
+          randomTarget.spaceIndex = tempSpace;
+          msg = `🌪️ ¡${activePlayer.name} intercambió casilla con ${randomTarget.name}!`;
+        }
+      } else if (eventType === 'steal_star') {
+        const sorted = [...updatedPlayers].filter((p) => p.id !== activePlayer.id).sort((a, b) => b.stars - a.stars);
+        const victim = sorted[0];
+        if (victim && victim.stars > 0 && !victim.shieldActive) {
+          victim.stars -= 1;
+          activePlayer.stars += 1;
+          msg = `🦹 ¡${activePlayer.name} le robó 1 estrella a ${victim.name}!`;
+        } else {
+          msg = `🛡️ ¡El robo de estrella fue bloqueado por escudo o falta de estrellas!`;
+        }
+      }
+
+      return {
+        ...prev,
+        players: updatedPlayers,
+        phase: 'turn_start',
+        chaosEvent: null,
+        activeMessage: msg || '¡Evento Caos resuelto con éxito!',
+      };
+    });
+  }, [updateAndBroadcastState]);
+
+  // 6. Submit Retro Card
+  const submitRetroCard = useCallback((cardData: Omit<RetroCard, 'id' | 'timestamp'>) => {
+    sounds.playStarFanfare();
+
+    const newCard: RetroCard = {
+      ...cardData,
+      id: `card-${Date.now()}`,
+      timestamp: Date.now(),
+    };
+
+    updateAndBroadcastState((prev) => {
+      const updatedPlayers = prev.players.map((p) => {
+        // Author earns +1 Star and unlocks medal
+        if (p.id === cardData.playerId) {
+          return {
+            ...p,
+            stars: p.stars + 1,
+            medals: {
+              ...p.medals,
+              [cardData.category]: true,
+            },
+          };
+        }
+        // Recipient of praise in 'seguir' earns +1 Star as well!
+        if (cardData.category === 'seguir' && cardData.recipientId && p.id === cardData.recipientId) {
+          return {
+            ...p,
+            stars: p.stars + 1,
+          };
+        }
+        return p;
+      });
+
+      const nextIdx = (prev.activePlayerIndex + 1) % prev.players.length;
+      const nextTurnNumber = prev.currentTurn + 1;
+      const newRound = Math.min(4, Math.floor((nextTurnNumber - 1) / Math.max(1, prev.players.length)) + 1);
+
+      // Check if 4 rounds are completed (turn 24)
+      const allRoundsCompleted = nextTurnNumber > prev.players.length * 4;
+
+      if (allRoundsCompleted) {
+        const anyMissingMedals = updatedPlayers.some(
+          (p) => !p.medals.seguir || !p.medals.mejorar || !p.medals.dejar
+        );
+
+        return {
+          ...prev,
+          retroCards: [newCard, ...prev.retroCards],
+          players: updatedPlayers,
+          targetRoulette: null,
+          chaosEvent: null,
+          phase: anyMissingMedals ? 'peaje' : 'bonus_stars',
+          activeMessage: anyMissingMedals
+            ? '🚧 ¡FASE DE EL PEAJE! Nadie se va sin aportar. Completa tus medallas pendientes.'
+            : '🌟 ¡FASE DE BONUS STARS! Quienes tienen sus 3 medallas giran la ruleta de bonificación final.',
+        };
+      }
+
+      // Check if a full round of 6 players ended
+      const roundJustEnded = nextIdx === 0;
+
+      return {
+        ...prev,
+        retroCards: [newCard, ...prev.retroCards],
+        players: updatedPlayers,
+        activePlayerIndex: nextIdx,
+        currentTurn: nextTurnNumber,
+        round: newRound,
+        phase: roundJustEnded ? 'minigame' : 'turn_start',
+        minigame: roundJustEnded
+          ? {
+              active: true,
+              type: newRound % 2 === 0 ? 'block_smash' : 'quick_vote',
+              title: newRound % 2 === 0 ? '⚡ ¡Machaca el Bloque !' : '🗳️ ¿Quién del equipo...?',
+              question: getRandomVoteQuestion().question,
+              endsAt: Date.now() + 8000,
+              countdown: 8,
+              scores: {},
+              votes: {},
+            }
+          : null,
+        targetRoulette: null,
+        chaosEvent: null,
+        activeMessage: roundJustEnded
+          ? '⚡ ¡Fin de ronda! ¡MINIJUEGO EXPRESS AUTOMÁTICO!'
+          : `Turno de ${updatedPlayers[nextIdx]?.name}. ¡Lanza el dado!`,
+      };
+    });
+  }, [updateAndBroadcastState]);
+
+  // 7. Use Power-Up
   const usePowerUp = useCallback((playerId: string, powerUp: PowerUpType, targetPlayerId?: string) => {
     updateAndBroadcastState((prev) => {
       const playerIndex = prev.players.findIndex((p) => p.id === playerId);
       if (playerIndex === -1) return prev;
       const player = prev.players[playerIndex];
 
-      // Remove power-up from backpack
       const pIdx = player.powerUps.indexOf(powerUp);
       if (pIdx === -1) return prev;
       const updatedPups = [...player.powerUps];
@@ -305,13 +571,13 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       switch (powerUp) {
         case 'turbo_mushroom':
           sounds.playJump();
-          newDiceRoll = [1, 1]; // Queue double dice
-          msg = `🍄 ¡${player.name} usó Champiñón Turbo! Tirará 2 dados.`;
+          newDiceRoll = [1, 1];
+          msg = `🍄 ¡${player.name} usó Champiñón Turbo! Tirará 2 dados simultáneos.`;
           break;
 
         case 'golden_die':
           sounds.playCoin();
-          msg = `🎲 ¡${player.name} usó el Dado Dorado de la Suerte! Sacará un 4, 5 o 6.`;
+          msg = `🎲 ¡${player.name} usó el Dado Dorado! Sacará un 4, 5 o 6.`;
           break;
 
         case 'boo':
@@ -362,10 +628,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   }, [updateAndBroadcastState]);
 
-  // 5. Submit Retro Card (Green, Yellow, Red)
-  const submitRetroCard = useCallback((cardData: Omit<RetroCard, 'id' | 'timestamp'>) => {
+  // 8. Submit Peaje Card
+  const submitPeajeCard = useCallback((cardData: Omit<RetroCard, 'id' | 'timestamp'>) => {
     sounds.playStarFanfare();
-
     const newCard: RetroCard = {
       ...cardData,
       id: `card-${Date.now()}`,
@@ -374,58 +639,111 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     updateAndBroadcastState((prev) => {
       const updatedPlayers = prev.players.map((p) => {
-        if (p.id !== cardData.playerId) return p;
-
-        // Unlock medal and award +1 Star!
-        const updatedMedals = {
-          ...p.medals,
-          [cardData.category]: true,
-        };
-
-        return {
-          ...p,
-          stars: p.stars + 1,
-          medals: updatedMedals,
-        };
+        if (p.id === cardData.playerId) {
+          return {
+            ...p,
+            stars: p.stars + 1,
+            medals: {
+              ...p.medals,
+              [cardData.category]: true,
+            },
+          };
+        }
+        return p;
       });
+
+      const anyMissing = updatedPlayers.some((p) => !p.medals.seguir || !p.medals.mejorar || !p.medals.dejar);
 
       return {
         ...prev,
         retroCards: [newCard, ...prev.retroCards],
         players: updatedPlayers,
-        activeMessage: `⭐ ¡${cardData.playerName} aportó a la retrospectiva y ganó +1 Estrella!`,
+        phase: anyMissing ? 'peaje' : 'bonus_stars',
+        activeMessage: anyMissing
+          ? `⭐ ¡${cardData.playerName} aportó en El Peaje! Quedan compañeros completando sus medallas.`
+          : '🌟 ¡Todos los jugadores completaron sus medallas! ¡Pasamos a Bonus Stars!',
       };
     });
   }, [updateAndBroadcastState]);
 
-  // 6. Next Turn
+  // 9. Spin Bonus Star
+  const spinBonusStar = useCallback((playerId: string) => {
+    sounds.playStarFanfare();
+    const starTypes: BonusStarType[] = ['critico', 'robo', 'reconocimiento'];
+    const chosenType = starTypes[Math.floor(Math.random() * starTypes.length)];
+
+    updateAndBroadcastState((prev) => {
+      const player = prev.players.find((p) => p.id === playerId);
+      if (!player) return prev;
+
+      let msg = '';
+      if (chosenType === 'critico') {
+        player.stars += 2;
+        msg = `⭐ ¡${player.name} ganó la Estrella del Crítico (+2 Estrellas)!`;
+      } else if (chosenType === 'robo') {
+        const sorted = [...prev.players].sort((a, b) => b.stars - a.stars);
+        const victim = sorted[0].id === player.id ? sorted[1] : sorted[0];
+        if (victim && victim.stars > 0) {
+          victim.stars -= 1;
+          player.stars += 1;
+          msg = `🦹 ¡${player.name} obtuvo la Estrella del Robo y le quitó 1 estrella a ${victim.name}!`;
+        } else {
+          player.stars += 1;
+          msg = `🦹 ¡${player.name} ganó la Estrella del Robo (+1 Estrella)!`;
+        }
+      } else {
+        const others = prev.players.filter((p) => p.id !== player.id);
+        const friend = others[Math.floor(Math.random() * others.length)];
+        if (friend) {
+          friend.stars += 2;
+          msg = `🤝 ¡${player.name} otorgó la Estrella del Reconocimiento (+2 Estrellas) a ${friend.name}!`;
+        }
+      }
+
+      return {
+        ...prev,
+        activeMessage: msg,
+        bonusStarWheel: {
+          active: true,
+          spinning: false,
+          playerId,
+          playerName: player.name,
+          starType: chosenType,
+          resolved: true,
+        },
+      };
+    });
+  }, [updateAndBroadcastState]);
+
+  // 10. Next Turn / Manual Advance
   const nextTurn = useCallback(() => {
     updateAndBroadcastState((prev) => {
       if (prev.players.length === 0) return prev;
       const nextIdx = (prev.activePlayerIndex + 1) % prev.players.length;
       const nextPlayer = prev.players[nextIdx];
 
-      // Check if turn count triggers end or minigame
       return {
         ...prev,
         activePlayerIndex: nextIdx,
         phase: 'turn_start',
         diceRoll: [1],
+        targetRoulette: null,
+        chaosEvent: null,
+        movement: null,
         activeMessage: `Turno de ${nextPlayer?.name || 'Siguiente jugador'}. ¡Lanza el dado!`,
       };
     });
   }, [updateAndBroadcastState]);
 
-  // 7. Trigger Minigame Express
+  // Minigame Triggers & Actions
   const triggerMinigame = useCallback((type: MinigameType) => {
     sounds.playJump();
-
     const minigameState: MinigameState = {
       active: true,
       type,
-      title: type === 'block_smash' ? '⚡ ¡Machaca el Bloque !' : '🗳️ Votación Rápida del Sprint',
+      title: type === 'block_smash' ? '⚡ ¡Machaca el Bloque !' : '🗳️ ¿Quién del equipo...?',
       question: type === 'quick_vote' ? getRandomVoteQuestion().question : undefined,
-      endsAt: Date.now() + 8000, // 8 seconds
+      endsAt: Date.now() + 8000,
       countdown: 8,
       scores: {},
       votes: {},
@@ -439,7 +757,6 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }));
   }, [updateAndBroadcastState]);
 
-  // 8. Submit Minigame Tap (Block Smash)
   const submitMinigameTap = useCallback((playerId: string) => {
     sounds.playSmash();
     updateAndBroadcastState((prev) => {
@@ -449,16 +766,12 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...prev,
         minigame: {
           ...prev.minigame,
-          scores: {
-            ...prev.minigame.scores,
-            [playerId]: currentScore + 1,
-          },
+          scores: { ...prev.minigame.scores, [playerId]: currentScore + 1 },
         },
       };
     });
   }, [updateAndBroadcastState]);
 
-  // 9. Submit Minigame Vote (Quick Vote)
   const submitMinigameVote = useCallback((voterId: string, targetId: string) => {
     sounds.playCoin();
     updateAndBroadcastState((prev) => {
@@ -467,16 +780,12 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...prev,
         minigame: {
           ...prev.minigame,
-          votes: {
-            ...prev.minigame.votes,
-            [voterId]: targetId,
-          },
+          votes: { ...prev.minigame.votes, [voterId]: targetId },
         },
       };
     });
   }, [updateAndBroadcastState]);
 
-  // 10. Finish Minigame & Award +2 Stars
   const finishMinigame = useCallback(() => {
     updateAndBroadcastState((prev) => {
       if (!prev.minigame) return prev;
@@ -491,22 +800,20 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         });
       } else {
-        // Count votes
-        const voteCounts: Record<string, number> = {};
-        Object.values(prev.minigame.votes).forEach((targetId) => {
-          voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
+        const counts: Record<string, number> = {};
+        Object.values(prev.minigame.votes).forEach((vId) => {
+          counts[vId] = (counts[vId] || 0) + 1;
         });
         let maxVotes = -1;
-        Object.entries(voteCounts).forEach(([pId, count]) => {
-          if (count > maxVotes) {
-            maxVotes = count;
-            winnerId = pId;
+        Object.entries(counts).forEach(([vId, votes]) => {
+          if (votes > maxVotes) {
+            maxVotes = votes;
+            winnerId = vId;
           }
         });
       }
 
-      sounds.playVictory();
-      confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
+      sounds.playStarFanfare();
 
       const updatedPlayers = prev.players.map((p) => {
         if (p.id === winnerId) {
@@ -516,89 +823,61 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       const winnerPlayer = prev.players.find((p) => p.id === winnerId);
-      const msg = winnerPlayer
-        ? `🏆 ¡${winnerPlayer.name} ganó el Minijuego y recibe +2 Estrellas doradas!`
-        : '¡Minijuego concluido!';
 
       return {
         ...prev,
         phase: 'turn_start',
         minigame: null,
         players: updatedPlayers,
-        activeMessage: msg,
+        activeMessage: winnerPlayer
+          ? `🏆 ¡${winnerPlayer.name} ganó el Minijuego y se lleva +2 Estrellas!`
+          : '¡Minijuego concluido!',
       };
     });
   }, [updateAndBroadcastState]);
 
-  // 11. Enter Peaje (Fill missing cards before podium)
   const enterPeaje = useCallback(() => {
-    sounds.playCoin();
     updateAndBroadcastState((prev) => ({
       ...prev,
       phase: 'peaje',
-      activeMessage: '🏁 Fase de El Peaje: Completando tarjetas pendientes antes del podio.',
+      activeMessage: '🚧 Fase de El Peaje: Todos completan sus 3 medallas.',
     }));
   }, [updateAndBroadcastState]);
 
-  // 12. Enter Podium & Award Bonus Stars
   const enterPodium = useCallback(() => {
-    sounds.playVictory();
-    confetti({ particleCount: 150, spread: 100, origin: { y: 0.5 } });
-
-    updateAndBroadcastState((prev) => {
-      // Award Bonus Star: Compañerismo to player with most praise cards received
-      const praiseCounts: Record<string, number> = {};
-      prev.retroCards.forEach((c) => {
-        if (c.category === 'seguir' && c.recipientId) {
-          praiseCounts[c.recipientId] = (praiseCounts[c.recipientId] || 0) + 1;
-        }
-      });
-
-      let maxPraise = 0;
-      let praiseWinnerId: string | undefined = undefined;
-      Object.entries(praiseCounts).forEach(([pId, count]) => {
-        if (count > maxPraise) {
-          maxPraise = count;
-          praiseWinnerId = pId;
-        }
-      });
-
-      const updatedPlayers = prev.players.map((p) => {
-        if (p.id === praiseWinnerId && !prev.bonusStarsAwarded) {
-          return { ...p, stars: p.stars + 1 };
-        }
-        return p;
-      });
-
-      return {
-        ...prev,
-        phase: 'podium',
-        players: updatedPlayers,
-        bonusStarsAwarded: true,
-        activeMessage: '🏆 ¡GRAN CEREMONIA DE PODIO Y RETROSPECTIVA SPRINT PARTY! 🏆',
-      };
-    });
+    confetti({ particleCount: 160, spread: 90, origin: { y: 0.6 } });
+    sounds.playVictoryMusic();
+    updateAndBroadcastState((prev) => ({
+      ...prev,
+      phase: 'podium',
+      activeMessage: '🏆 ¡FIN DE LA RETROSPECTIVA! Podio de campeones.',
+    }));
   }, [updateAndBroadcastState]);
 
-  // 13. Reset Game
   const resetGame = useCallback(() => {
-    const newCode = generateRoomCode();
-    setGameState({
-      roomCode: newCode,
-      phase: 'lobby',
-      players: [],
+    updateAndBroadcastState((prev) => ({
+      ...prev,
+      phase: 'turn_start',
+      players: createInitialPlayers(),
       activePlayerIndex: 0,
-      diceRoll: [1],
       currentTurn: 1,
-      maxTurns: 15,
-      boardSpaces: BOARD_SPACES,
-      traps: [],
+      round: 1,
       retroCards: [],
+      traps: [],
       minigame: null,
-      activeMessage: '¡Esperando a que los jugadores se unan con el Joy-Phone!',
-      starLeaderId: undefined,
-      bonusStarsAwarded: false,
-    });
+      movement: null,
+      targetRoulette: null,
+      chaosEvent: null,
+      bonusStarWheel: null,
+      activeMessage: '¡Nueva partida iniciada en la Senda Arcoíris!',
+    }));
+  }, [updateAndBroadcastState]);
+
+  // Clean up interval on unmount
+  useEffect(() => {
+    return () => {
+      if (activeMovementTimer.current) clearInterval(activeMovementTimer.current);
+    };
   }, []);
 
   return (
@@ -613,12 +892,16 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         joinPlayer,
         rollDice,
         usePowerUp,
+        resolveRoulette,
+        resolveChaosEvent,
         submitRetroCard,
         triggerMinigame,
         submitMinigameTap,
         submitMinigameVote,
         finishMinigame,
         enterPeaje,
+        submitPeajeCard,
+        spinBonusStar,
         enterPodium,
         nextTurn,
         resetGame,
@@ -629,7 +912,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
-export const useGame = (): GameContextType => {
+export const useGame = () => {
   const context = useContext(GameContext);
   if (!context) {
     throw new Error('useGame must be used within a GameProvider');

@@ -99,16 +99,58 @@ export function getSpacePosition(spaceIndex: number, yOffset: number = 0.05): TH
 }
 
 /**
- * Gets exact 3D coordinates for a player pawn on their specific lane
+ * Gets position for a player standing on a space, neatly offsetting if multiple players share the tile
+ */
+export function getPlayerPositionOnSpace(
+  spaceIndex: number,
+  playerIndexOnSpace: number = 0,
+  totalPlayersOnSpace: number = 1
+): THREE.Vector3 {
+  const base = getSpacePosition(spaceIndex, 0.16);
+
+  if (totalPlayersOnSpace > 1) {
+    const angle = (playerIndexOnSpace / totalPlayersOnSpace) * Math.PI * 2 + (spaceIndex * 0.5);
+    const radius = Math.min(0.32, 0.16 + totalPlayersOnSpace * 0.03);
+    base.x += Math.cos(angle) * radius;
+    base.z += Math.sin(angle) * radius;
+  }
+
+  return base;
+}
+
+/**
+ * Calculates smooth parabolic hop trajectory between two consecutive tiles
+ * @param fromSpace Index of current space (0 to 19)
+ * @param toSpace Index of target space (0 to 19)
+ * @param hopProgress Progress of this single hop (0.0 to 1.0)
+ * @param playerIndexOnSpace Offset index on target space
+ * @param totalPlayersOnSpace Total players clustered on target space
+ */
+export function getHopPosition(
+  fromSpace: number,
+  toSpace: number,
+  hopProgress: number,
+  playerIndexOnSpace: number = 0,
+  totalPlayersOnSpace: number = 1
+): THREE.Vector3 {
+  const clampedT = Math.max(0, Math.min(1, hopProgress));
+  
+  const fromPos = getPlayerPositionOnSpace(fromSpace, 0, 1);
+  const targetPos = getPlayerPositionOnSpace(toSpace, playerIndexOnSpace, totalPlayersOnSpace);
+
+  // Linear interpolation along ground
+  const currentPos = new THREE.Vector3().lerpVectors(fromPos, targetPos, clampedT);
+
+  // Parabolic bounce arc
+  const hopHeight = Math.sin(clampedT * Math.PI) * 0.65;
+  currentPos.y += hopHeight;
+
+  return currentPos;
+}
+
+/**
+ * Legacy compatibility helper
  */
 export function getPlayerPosition(spaceIndex: number, laneIndex: number, progressHop: number = 0): THREE.Vector3 {
-  const t = (spaceIndex % TRACK_SPECS.totalSpaces) / TRACK_SPECS.totalSpaces;
-  // 6 lanes: index 0 to 5 -> offset from -2.5 to 2.5 * laneWidth
-  const laneOffset = (laneIndex - 2.5) * TRACK_SPECS.laneWidth;
-  const pt = getTrackPoint(t, laneOffset);
-
-  // Add jump/hop height when moving
-  const hopHeight = Math.sin(progressHop * Math.PI) * 0.45;
-
-  return new THREE.Vector3(pt.position.x, 0.15 + hopHeight, pt.position.z);
+  return getPlayerPositionOnSpace(spaceIndex, laneIndex % 6, 6);
 }

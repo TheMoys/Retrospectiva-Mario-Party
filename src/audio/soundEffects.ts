@@ -105,6 +105,25 @@ class SoundEngine {
     osc.stop(ctx.currentTime + 0.05);
   }
 
+  // Roulette tick sound
+  public playRouletteTick(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(800 + Math.random() * 150, ctx.currentTime);
+
+    gain.gain.setValueAtTime(0.08, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.04);
+  }
+
   // Boo spooky laughter / wobble
   public playBoo(): void {
     const ctx = this.getContext();
@@ -192,6 +211,10 @@ class SoundEngine {
       osc.stop(time + note.d);
       time += note.d + 0.02;
     });
+  }
+
+  public playVictoryMusic(): void {
+    this.playVictory();
   }
 }
 

@@ -64,3 +64,12 @@ export const CHARACTERS: Record<CharacterId, Character> = {
 };
 
 export const CHARACTER_LIST: Character[] = Object.values(CHARACTERS);
+
+export const DEFAULT_TEAM_MEMBERS = [
+  { name: 'Alex', role: 'Front', characterId: 'mario' as CharacterId },
+  { name: 'Sofía', role: 'Back', characterId: 'luigi' as CharacterId },
+  { name: 'Mateo', role: 'QA', characterId: 'peach' as CharacterId },
+  { name: 'Lucía', role: 'UX', characterId: 'yoshi' as CharacterId },
+  { name: 'Carlos', role: 'DevOps', characterId: 'bowser' as CharacterId },
+  { name: 'Elena', role: 'PO', characterId: 'toad' as CharacterId },
+];
