@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { CharacterId } from '@/types/game';
 
 const gltfLoader = new GLTFLoader();
@@ -7,10 +8,13 @@ const loadedGltfCache = new Map<CharacterId, THREE.Group>();
 
 /**
  * Checks and loads external GLTF/GLB models if available in /models/[characterId].glb
+ * Features automatic bounding-box normalization, centering on pedestal, double-sided materials,
+ * and robust SkinnedMesh cloning via SkeletonUtils.
  */
 export function tryLoadGLTFCharacter(charId: CharacterId, onLoaded: (group: THREE.Group) => void) {
   if (loadedGltfCache.has(charId)) {
-    onLoaded(loadedGltfCache.get(charId)!.clone());
+    const cached = loadedGltfCache.get(charId)!;
+    onLoaded(SkeletonUtils.clone(cached) as THREE.Group);
     return;
   }
 
@@ -18,20 +22,58 @@ export function tryLoadGLTFCharacter(charId: CharacterId, onLoaded: (group: THRE
   gltfLoader.load(
     modelUrl,
     (gltf) => {
-      const model = gltf.scene;
-      model.scale.set(0.38, 0.38, 0.38);
-      model.traverse((child) => {
+      const rawScene = gltf.scene;
+
+      // 1. Enable shadows & ensure material visibility for all child meshes
+      rawScene.traverse((child) => {
         if ((child as THREE.Mesh).isMesh) {
           child.castShadow = true;
           child.receiveShadow = true;
+          const mesh = child as THREE.Mesh;
+          if (mesh.material) {
+            if (Array.isArray(mesh.material)) {
+              mesh.material.forEach((m) => {
+                m.side = THREE.DoubleSide;
+                m.depthWrite = true;
+              });
+            } else {
+              mesh.material.side = THREE.DoubleSide;
+              mesh.material.depthWrite = true;
+            }
+          }
         }
       });
-      loadedGltfCache.set(charId, model);
-      onLoaded(model.clone());
+
+      // 2. Measure actual bounding box after scene hierarchy
+      rawScene.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(rawScene);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const center = new THREE.Vector3();
+      box.getCenter(center);
+
+      // Target unscaled height = 1.65 (so when scaled by 0.62 in GameBoard3D, rendered height is ~1.02 units)
+      const targetHeight = 1.65;
+      const modelDimension = Math.max(size.y, size.x * 0.7, size.z * 0.7);
+      const scaleFactor = targetHeight / (modelDimension > 0.0001 ? modelDimension : 1.0);
+
+      // 3. Wrap in a normalized anchor group: centered at (0, 0) and seated on feet at Y=0
+      const container = new THREE.Group();
+      container.name = 'char_body_group';
+
+      rawScene.scale.set(scaleFactor, scaleFactor, scaleFactor);
+      rawScene.position.x = -center.x * scaleFactor;
+      rawScene.position.z = -center.z * scaleFactor;
+      rawScene.position.y = -box.min.y * scaleFactor;
+
+      container.add(rawScene);
+
+      loadedGltfCache.set(charId, container);
+      onLoaded(SkeletonUtils.clone(container) as THREE.Group);
     },
     undefined,
-    () => {
-      // If GLB doesn't exist, fallback silently to high-fidelity procedural 3D model
+    (err) => {
+      console.warn(`[GLB Loader] Could not load /models/${charId}.glb (using procedural 3D model instead):`, err);
     }
   );
 }
@@ -524,7 +566,7 @@ export function createCharacterPawn(charId: CharacterId, neonColor: string): THR
   // Check if an external GLB model exists and replace procedural mesh when loaded
   tryLoadGLTFCharacter(charId, (gltfModel) => {
     pawnGroup.remove(charBodyGroup);
-    gltfModel.position.y = 0.16;
+    gltfModel.position.y = 0.09;
     gltfModel.name = 'char_body_group';
     pawnGroup.add(gltfModel);
   });
