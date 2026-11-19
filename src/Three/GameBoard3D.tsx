@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GameState, Player } from '@/types/game';
 import { BOARD_SPACES } from '@/constants/boardSpaces';
 import { CHARACTERS } from '@/constants/characters';
@@ -50,6 +51,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const controlsRef = useRef<OrbitControls | null>(null);
   const animFrameId = useRef<number | null>(null);
 
   // 3D Objects References
@@ -62,6 +64,23 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
   const questionBlocksRef = useRef<THREE.Mesh[]>([]);
   const piranhasRef = useRef<THREE.Group[]>([]);
   const starBitsRef = useRef<THREE.Points | null>(null);
+  const laneMaterialsRef = useRef<THREE.MeshStandardMaterial[]>([]);
+  const spaceMaterialsRef = useRef<THREE.MeshStandardMaterial[]>([]);
+  const crystalTextureRef = useRef<THREE.CanvasTexture | null>(null);
+  const nebulaeMeshesRef = useRef<THREE.Mesh[]>([]);
+  const planetGroupRef = useRef<THREE.Group | null>(null);
+  const shootingStarRef = useRef<{
+    line: THREE.Line;
+    active: boolean;
+    progress: number;
+    startX: number;
+    startY: number;
+    startZ: number;
+    dirX: number;
+    dirY: number;
+    dirZ: number;
+    speed: number;
+  } | null>(null);
   const dustTrailRef = useRef<{
     mesh: THREE.Points;
     pos: Float32Array;
@@ -69,6 +88,40 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
   } | null>(null);
   const lastStepSoundTileRef = useRef<number>(-1);
   const lastLabelsHashRef = useRef<string>('');
+
+  // Interactive Camera Controls: Reset, Focus Character, Birds-Eye View
+  const resetCamera = () => {
+    if (!cameraRef.current || !controlsRef.current) return;
+    controlsRef.current.target.set(0, 0.4, -0.4);
+    cameraRef.current.position.set(0, 15.5, 13.8);
+    cameraRef.current.fov = 38;
+    cameraRef.current.updateProjectionMatrix();
+    controlsRef.current.update();
+  };
+
+  const focusActivePlayer = () => {
+    if (!cameraRef.current || !controlsRef.current) return;
+    const activePlayer = gameStateRef.current.players[gameStateRef.current.activePlayerIndex];
+    if (!activePlayer) return;
+    const pawn = pawnsMapRef.current.get(activePlayer.id);
+    if (!pawn) return;
+
+    const pawnPos = new THREE.Vector3();
+    pawn.getWorldPosition(pawnPos);
+
+    controlsRef.current.target.set(pawnPos.x, pawnPos.y + 0.5, pawnPos.z);
+    cameraRef.current.position.set(pawnPos.x, pawnPos.y + 3.8, pawnPos.z + 5.5);
+    cameraRef.current.lookAt(pawnPos.x, pawnPos.y + 0.5, pawnPos.z);
+    controlsRef.current.update();
+  };
+
+  const topDownView = () => {
+    if (!cameraRef.current || !controlsRef.current) return;
+    controlsRef.current.target.set(0, 0, 0);
+    cameraRef.current.position.set(0, 26.0, 0.01);
+    cameraRef.current.lookAt(0, 0, 0);
+    controlsRef.current.update();
+  };
 
   // Helper: Create Mario Kart 8 Crystal Grid Texture for Rainbow Road
   const createCrystalGridTexture = (): THREE.CanvasTexture => {
@@ -185,6 +238,19 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     const torusMesh = new THREE.Mesh(torusGeo, torusMat);
     torusMesh.rotation.x = Math.PI / 2;
     starGroup.add(torusMesh);
+
+    // Dynamic Second Tilted Cyan Halo Ring
+    const torus2Geo = new THREE.TorusGeometry(2.5, 0.035, 16, 64);
+    const torus2Mat = new THREE.MeshBasicMaterial({
+      color: 0x38bdf8,
+      transparent: true,
+      opacity: 0.8,
+    });
+    const torus2Mesh = new THREE.Mesh(torus2Geo, torus2Mat);
+    torus2Mesh.rotation.x = Math.PI / 3;
+    torus2Mesh.rotation.y = Math.PI / 6;
+    torus2Mesh.name = 'star_tilted_ring';
+    starGroup.add(torus2Mesh);
 
     starGroup.position.set(0, 1.35, 0);
     return starGroup;
@@ -365,10 +431,10 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     scene.background = new THREE.Color(0x060714);
     sceneRef.current = scene;
 
-    // 2. Camera (Panoramic Perspective FOV 42 framed for 24.9 x 12.4 circuit)
-    const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 1000);
-    camera.position.set(0, 23.5, 20.0);
-    camera.lookAt(0, 0, -0.6);
+    // 2. Camera: Controllable with close-up default framing (FOV 38)
+    const camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 1000);
+    camera.position.set(0, 15.5, 13.8);
+    camera.lookAt(0, 0, -0.4);
     cameraRef.current = camera;
 
     // 3. High Quality Renderer
@@ -383,6 +449,17 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
 
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
+
+    // 3B. OrbitControls for Interactive 3D Zooming, Orbiting and Panning
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.minDistance = 3.2; // Allows zooming right into the characters
+    controls.maxDistance = 42.0; // Max zoom out boundary
+    controls.maxPolarAngle = Math.PI / 2 - 0.04; // Never dip below ground plane
+    controls.minPolarAngle = 0.1;
+    controls.target.set(0, 0.4, -0.4);
+    controlsRef.current = controls;
 
     // 4. Lights with Studio Radiance & Mario Kart Specular Depth
     const ambientLight = new THREE.AmbientLight(0x38bdf8, 0.75);
@@ -482,8 +559,10 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     ringMesh.rotation.y = Math.PI / 6;
     planetGroup.add(ringMesh);
     scene.add(planetGroup);
+    planetGroupRef.current = planetGroup;
 
     // 5C. Glowing Nebulae Dust Clouds (Positioned high in cosmic backdrop)
+    nebulaeMeshesRef.current = [];
     const nebulae = [
       { x: -18, y: 12, z: -35, color: 0x7e22ce, scale: 28 },
       { x: 20, y: 15, z: -35, color: 0x0284c7, scale: 32 },
@@ -502,6 +581,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
       const cloudMesh = new THREE.Mesh(cloudGeo, cloudMat);
       cloudMesh.position.set(neb.x, neb.y, neb.z);
       scene.add(cloudMesh);
+      nebulaeMeshesRef.current.push(cloudMesh);
     });
 
     // 5D. Floating Star Bits Particle Dust
@@ -525,12 +605,39 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     scene.add(starBitsMesh);
     starBitsRef.current = starBitsMesh;
 
+    // 5E. Animated Cosmic Shooting Star / Comet with Tail
+    const cometGeo = new THREE.BufferGeometry();
+    const cometPoints = new Float32Array(24 * 3);
+    cometGeo.setAttribute('position', new THREE.BufferAttribute(cometPoints, 3));
+    const cometMat = new THREE.LineBasicMaterial({
+      color: 0x67e8f9,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+    });
+    const cometLine = new THREE.Line(cometGeo, cometMat);
+    scene.add(cometLine);
+    shootingStarRef.current = {
+      line: cometLine,
+      active: false,
+      progress: 0,
+      startX: -30,
+      startY: 22,
+      startZ: -35,
+      dirX: 1.4,
+      dirY: -0.6,
+      dirZ: 0.8,
+      speed: 0.022,
+    };
+
     // 6. BUILD AUTHENTIC 6-LANE RAINBOW ROAD (SENDA ARCOÍRIS)
     const samples = 480;
     const laneCount = 6;
     const laneWidth = 0.55; // Total width = 3.30
     const halfTotalWidth = (laneCount * laneWidth) / 2;
     const crystalTex = createCrystalGridTexture();
+    crystalTextureRef.current = crystalTex;
+    laneMaterialsRef.current = [];
 
     const rainbowGroup = new THREE.Group();
     rainbowGroup.name = 'rainbow_road';
@@ -574,18 +681,19 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
       const laneMat = new THREE.MeshStandardMaterial({
         color: laneConfig.color,
         emissive: laneConfig.emissive,
-        emissiveIntensity: 0.85,
+        emissiveIntensity: 0.95,
         map: crystalTex,
-        roughness: 0.15,
-        metalness: 0.1,
+        roughness: 0.12,
+        metalness: 0.25,
         transparent: true,
-        opacity: 0.94,
+        opacity: 0.96,
         toneMapped: false, // True neon saturation!
       });
 
       const laneMesh = new THREE.Mesh(geo, laneMat);
       laneMesh.receiveShadow = true;
       rainbowGroup.add(laneMesh);
+      laneMaterialsRef.current.push(laneMat);
     }
 
     // 6B. Luminous White Fiber-Optic Lane Dividers (5 lines)
@@ -674,7 +782,8 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
 
     scene.add(rainbowGroup);
 
-    // 7. BOARD SPACES (20 Circular Stepping Discs)
+    // 7. BOARD SPACES (20 Circular Stepping Discs with Dynamic Pulsing Glow)
+    spaceMaterialsRef.current = [];
     BOARD_SPACES.forEach((space) => {
       const pos = getSpacePosition(space.index, 0.04);
       const spaceGroup = new THREE.Group();
@@ -685,14 +794,15 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
       const cylMat = new THREE.MeshStandardMaterial({
         color: space.colorHex,
         emissive: space.neonHex,
-        emissiveIntensity: 0.55,
-        roughness: 0.25,
-        metalness: 0.35,
+        emissiveIntensity: 0.65,
+        roughness: 0.20,
+        metalness: 0.40,
         toneMapped: false,
       });
       const cylMesh = new THREE.Mesh(cylGeo, cylMat);
       cylMesh.receiveShadow = true;
       spaceGroup.add(cylMesh);
+      spaceMaterialsRef.current.push(cylMat);
 
       // Top decal
       const iconTex = createSpaceIconTexture(space.type, space.colorHex, space.neonHex);
@@ -813,14 +923,12 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     scene.add(dustMesh);
     dustTrailRef.current = { mesh: dustMesh, pos: dustPos, life: dustLife };
 
-    // Window Resize with Dynamic FOV (Prevents cramping in split-screen/demo mode)
+    // Window Resize Handler with OrbitControls
     const handleResize = () => {
       if (!container || !camera || !renderer) return;
       const w = container.clientWidth;
       const h = container.clientHeight;
-      const aspect = w / h;
-      camera.aspect = aspect;
-      camera.fov = aspect < 1.65 ? Math.min(Math.max(42 * (1.65 / aspect), 42), 56) : 42;
+      camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
     };
@@ -837,10 +945,84 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
       const movement = currentGameState.movement;
       const isMovingPhase = currentGameState.phase === 'moving' && movement != null;
 
-      // 1. Super Star: Upright floating + majestic continuous rotation
+      // Update interactive OrbitControls
+      if (controlsRef.current) {
+        controlsRef.current.update();
+      }
+
+      // 1. Super Star: Upright floating + majestic continuous rotation + tilted ring
       if (starMeshRef.current) {
         starMeshRef.current.position.y = 1.45 + Math.sin(elapsedTime * 2.2) * 0.18;
         starMeshRef.current.rotation.y = elapsedTime * 0.85;
+        const tiltedRing = starMeshRef.current.getObjectByName('star_tilted_ring');
+        if (tiltedRing) {
+          tiltedRing.rotation.z = elapsedTime * 1.1;
+        }
+      }
+
+      // 1B. Flowing Rainbow Road Crystal Grid texture (like real Mario Kart 8!)
+      if (crystalTextureRef.current) {
+        crystalTextureRef.current.offset.y -= 0.0035;
+      }
+
+      // 1C. Pulsing neon waves across rainbow lanes
+      laneMaterialsRef.current.forEach((mat, idx) => {
+        mat.emissiveIntensity = 0.85 + Math.sin(elapsedTime * 2.8 + idx * 0.7) * 0.35;
+      });
+
+      // 1D. Rhythmic arcade neon pulse on board spaces
+      spaceMaterialsRef.current.forEach((mat, idx) => {
+        mat.emissiveIntensity = 0.55 + Math.sin(elapsedTime * 3.2 + idx * 0.35) * 0.25;
+      });
+
+      // 1E. Saturn planet and ring slow rotation
+      if (planetGroupRef.current) {
+        planetGroupRef.current.rotation.y = elapsedTime * 0.06;
+      }
+
+      // 1F. Breathing cosmic nebulae opacity
+      nebulaeMeshesRef.current.forEach((mesh, idx) => {
+        const mat = mesh.material as THREE.MeshBasicMaterial;
+        if (mat) {
+          mat.opacity = 0.22 + Math.sin(elapsedTime * 1.2 + idx * 1.5) * 0.08;
+        }
+      });
+
+      // 1G. Cosmic Shooting Star / Comet streak
+      if (shootingStarRef.current) {
+        const comet = shootingStarRef.current;
+        if (!comet.active && Math.random() < 0.008) {
+          comet.active = true;
+          comet.progress = 0;
+          comet.startX = -28 + (Math.random() - 0.5) * 15;
+          comet.startY = 18 + Math.random() * 8;
+          comet.startZ = -32 + (Math.random() - 0.5) * 10;
+        }
+
+        if (comet.active) {
+          comet.progress += comet.speed;
+          const mat = comet.line.material as THREE.LineBasicMaterial;
+          const posAttr = comet.line.geometry.attributes.position;
+          const pArr = posAttr.array as Float32Array;
+
+          if (comet.progress < 1.0) {
+            mat.opacity = Math.sin(comet.progress * Math.PI) * 0.95;
+            const headX = comet.startX + comet.progress * 35 * comet.dirX;
+            const headY = comet.startY + comet.progress * 35 * comet.dirY;
+            const headZ = comet.startZ + comet.progress * 35 * comet.dirZ;
+
+            for (let i = 0; i < 24; i++) {
+              const tailRatio = i / 24;
+              pArr[i * 3] = headX - tailRatio * 4.5 * comet.dirX;
+              pArr[i * 3 + 1] = headY - tailRatio * 4.5 * comet.dirY;
+              pArr[i * 3 + 2] = headZ - tailRatio * 4.5 * comet.dirZ;
+            }
+            posAttr.needsUpdate = true;
+          } else {
+            comet.active = false;
+            mat.opacity = 0;
+          }
+        }
       }
 
       // 2. Halo ring pulsation
@@ -995,6 +1177,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     return () => {
       window.removeEventListener('resize', handleResize);
       if (animFrameId.current) cancelAnimationFrame(animFrameId.current);
+      if (controlsRef.current) controlsRef.current.dispose();
       renderer.dispose();
       container.innerHTML = '';
       pawnsMapRef.current.forEach((pawn) => scene.remove(pawn));
@@ -1218,6 +1401,46 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
           </div>
         </div>
       ))}
+
+      {/* Floating 3D Camera Controls HUD */}
+      <div className="absolute bottom-4 left-4 z-20 flex flex-col gap-2 pointer-events-auto">
+        <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-slate-900/85 backdrop-blur-md border border-white/15 shadow-2xl">
+          <button
+            onClick={resetCamera}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800/90 hover:bg-slate-700/90 text-white hover:text-yellow-300 font-bold text-xs shadow transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-yellow-400"
+            title="Restablecer a la vista cercana predeterminada"
+            aria-label="Restablecer cámara a vista cercana"
+          >
+            <span className="text-sm">🔄</span>
+            <span className="hidden sm:inline">Cerca</span>
+          </button>
+
+          <button
+            onClick={focusActivePlayer}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-yellow-500/20 hover:from-amber-500/30 hover:to-yellow-500/30 text-yellow-300 border border-yellow-400/30 font-bold text-xs shadow transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-yellow-400"
+            title="Enfocar en primer plano al personaje en turno"
+            aria-label="Enfocar cámara en el jugador activo"
+          >
+            <span className="text-sm">🎯</span>
+            <span className="hidden sm:inline">Ver Personaje</span>
+          </button>
+
+          <button
+            onClick={topDownView}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800/90 hover:bg-slate-700/90 text-white hover:text-cyan-300 font-bold text-xs shadow transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+            title="Ver circuito completo desde arriba"
+            aria-label="Vista aérea del tablero"
+          >
+            <span className="text-sm">🦅</span>
+            <span className="hidden sm:inline">Cenital</span>
+          </button>
+        </div>
+
+        <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-900/60 backdrop-blur-sm border border-white/5 text-[11px] text-slate-300 pointer-events-none">
+          <span className="text-yellow-400">✦</span>
+          <span>Arrastra para rotar • Rueda para zoom • Clic derecho para mover</span>
+        </div>
+      </div>
     </div>
   );
 };
