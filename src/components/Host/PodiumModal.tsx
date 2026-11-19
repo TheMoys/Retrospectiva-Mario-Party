@@ -1,6 +1,7 @@
 import React from 'react';
 import { useGame } from '@/context/GameContext';
 import { CHARACTERS } from '@/constants/characters';
+import { CharacterAvatar } from '@/components/Common/CharacterAvatar';
 
 interface PodiumModalProps {
   isOpen: boolean;
@@ -39,7 +40,9 @@ export const PodiumModal: React.FC<PodiumModalProps> = ({ isOpen, onOpenRetroExp
         {/* 2ND PLACE (Left) */}
         {second && (
           <div className="flex flex-col items-center flex-1 max-w-[200px]">
-            <div className="text-3xl mb-1">{CHARACTERS[second.characterId].avatar}</div>
+            <div className="mb-2">
+              <CharacterAvatar characterId={second.characterId} size="lg" />
+            </div>
             <div className="text-sm font-extrabold text-white truncate max-w-[140px] text-center mb-1">
               {second.name}
             </div>
@@ -56,7 +59,9 @@ export const PodiumModal: React.FC<PodiumModalProps> = ({ isOpen, onOpenRetroExp
         {first && (
           <div className="flex flex-col items-center flex-1 max-w-[220px]">
             <div className="text-2xl animate-bounce mb-0.5">👑</div>
-            <div className="text-4xl md:text-5xl mb-1 scale-110">{CHARACTERS[first.characterId].avatar}</div>
+            <div className="mb-2 scale-110">
+              <CharacterAvatar characterId={first.characterId} size="xl" />
+            </div>
             <div className="text-base font-extrabold text-yellow-300 truncate max-w-[160px] text-center mb-1">
               {first.name}
             </div>
@@ -74,7 +79,9 @@ export const PodiumModal: React.FC<PodiumModalProps> = ({ isOpen, onOpenRetroExp
         {/* 3RD PLACE (Right) */}
         {third && (
           <div className="flex flex-col items-center flex-1 max-w-[200px]">
-            <div className="text-3xl mb-1">{CHARACTERS[third.characterId].avatar}</div>
+            <div className="mb-2">
+              <CharacterAvatar characterId={third.characterId} size="lg" />
+            </div>
             <div className="text-sm font-extrabold text-white truncate max-w-[140px] text-center mb-1">
               {third.name}
             </div>
@@ -97,7 +104,7 @@ export const PodiumModal: React.FC<PodiumModalProps> = ({ isOpen, onOpenRetroExp
               className="px-3.5 py-1.5 rounded-xl bg-slate-900 border border-white/10 text-xs font-bold flex items-center gap-2"
             >
               <span>#{idx + 4}</span>
-              <span>{CHARACTERS[p.characterId].avatar}</span>
+              <CharacterAvatar characterId={p.characterId} size="sm" showBorder={false} />
               <span className="text-white">{p.name}</span>
               <span className="text-yellow-400">⭐ {p.stars}</span>
             </div>

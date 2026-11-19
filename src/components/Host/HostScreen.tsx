@@ -12,7 +12,7 @@ export const HostScreen: React.FC = () => {
   const [exportModalOpen, setExportModalOpen] = useState(false);
 
   return (
-    <div className="relative w-screen h-screen bg-slate-950 overflow-hidden select-none flex flex-col">
+    <div className="relative w-full h-full bg-slate-950 overflow-hidden select-none flex flex-col">
       {/* 1. Top TV HUD Scoreboard */}
       <TopScoreboard gameState={gameState} />
 

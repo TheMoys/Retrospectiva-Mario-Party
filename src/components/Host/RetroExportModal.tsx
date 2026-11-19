@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useGame } from '@/context/GameContext';
 import { CHARACTERS } from '@/constants/characters';
+import { CharacterAvatar } from '@/components/Common/CharacterAvatar';
 import { RetroCard } from '@/types/game';
 
 interface RetroExportModalProps {
@@ -214,7 +215,7 @@ export const RetroExportModal: React.FC<RetroExportModalProps> = ({ isOpen, onCl
                 return (
                   <div key={p.id} className="p-4 rounded-2xl bg-slate-800/60 border border-white/10">
                     <div className="flex items-center gap-3 mb-3 pb-2 border-b border-white/10">
-                      <span className="text-2xl">{char.avatar}</span>
+                      <CharacterAvatar characterId={p.characterId} size="md" />
                       <div>
                         <div className="font-bold text-sm text-white">{p.name}</div>
                         <div className="text-xs text-yellow-300">⭐ {p.stars} Estrellas</div>

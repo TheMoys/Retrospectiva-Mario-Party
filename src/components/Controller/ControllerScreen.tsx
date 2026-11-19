@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useGame } from '@/context/GameContext';
 import { CHARACTERS } from '@/constants/characters';
 import { BOARD_SPACES } from '@/constants/boardSpaces';
+import { CharacterAvatar } from '@/components/Common/CharacterAvatar';
 import { DicePad } from './DicePad';
 import { BackpackModal } from './BackpackModal';
 import { RetroCardModal } from './RetroCardModal';
@@ -40,9 +41,9 @@ export const ControllerScreen: React.FC = () => {
 
   if (!me) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-center text-white">
-        <span className="text-5xl animate-bounce mb-3">🎮</span>
-        <h2 className="text-xl font-bold">Conectando Joy-Phone...</h2>
+      <div className="w-full h-full bg-slate-950 flex flex-col items-center justify-center p-6 text-center text-white">
+        <span className="text-4xl animate-bounce mb-3">🎮</span>
+        <h2 className="text-lg font-bold">Conectando Joy-Phone...</h2>
         <p className="text-xs text-slate-400 mt-1">Sala: {gameState.roomCode}</p>
       </div>
     );
@@ -51,22 +52,17 @@ export const ControllerScreen: React.FC = () => {
   const char = CHARACTERS[me.characterId];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col select-none overflow-x-hidden">
+    <div className="w-full h-full bg-slate-950 text-white flex flex-col select-none overflow-y-auto overflow-x-hidden">
       {/* Top Mobile Joy-Phone Header */}
       <div
-        className="p-4 border-b border-white/10 flex items-center justify-between"
+        className="p-3 border-b border-white/10 flex items-center justify-between shrink-0"
         style={{ backgroundColor: `${char.color}22` }}
       >
-        <div className="flex items-center gap-3">
-          <div
-            className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl font-bold border-2 shadow-md"
-            style={{ backgroundColor: `${char.color}44`, borderColor: char.neonColor }}
-          >
-            {char.avatar}
-          </div>
+        <div className="flex items-center gap-2.5">
+          <CharacterAvatar characterId={me.characterId} size="md" />
           <div>
-            <div className="text-xs text-slate-400 font-bold uppercase tracking-wider">Joy-Phone</div>
-            <div className="text-base font-extrabold text-white flex items-center gap-1.5">
+            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Joy-Phone</div>
+            <div className="text-sm font-extrabold text-white flex items-center gap-1">
               <span>{me.name}</span>
               {gameState.starLeaderId === me.id && <span>👑</span>}
             </div>
@@ -78,7 +74,7 @@ export const ControllerScreen: React.FC = () => {
           <div className="text-sm font-extrabold text-yellow-300 flex items-center justify-end gap-1">
             <span>⭐ {me.stars}</span>
           </div>
-          <div className="flex items-center gap-1 mt-1 text-xs">
+          <div className="flex items-center gap-1 mt-0.5 text-xs">
             <span className={me.medals.seguir ? 'opacity-100' : 'opacity-25 grayscale'}>🟢</span>
             <span className={me.medals.mejorar ? 'opacity-100' : 'opacity-25 grayscale'}>🟡</span>
             <span className={me.medals.dejar ? 'opacity-100' : 'opacity-25 grayscale'}>🔴</span>

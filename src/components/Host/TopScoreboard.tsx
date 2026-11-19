@@ -1,6 +1,7 @@
 import React from 'react';
 import { Player, GameState } from '@/types/game';
 import { CHARACTERS } from '@/constants/characters';
+import { CharacterAvatar } from '@/components/Common/CharacterAvatar';
 
 interface TopScoreboardProps {
   gameState: GameState;
@@ -49,16 +50,8 @@ export const TopScoreboard: React.FC<TopScoreboardProps> = ({ gameState }) => {
                 </div>
               )}
 
-              {/* Character Avatar with team color dot */}
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center text-base shrink-0 font-bold border-2"
-                style={{
-                  backgroundColor: `${char.color}22`,
-                  borderColor: char.neonColor,
-                }}
-              >
-                {char.avatar}
-              </div>
+              {/* Character Avatar */}
+              <CharacterAvatar characterId={player.characterId} size="md" />
 
               {/* Player Name and Stars */}
               <div className="flex-1 min-w-0">

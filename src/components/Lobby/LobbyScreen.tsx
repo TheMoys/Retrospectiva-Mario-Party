@@ -4,6 +4,7 @@ import { CHARACTER_LIST, CHARACTERS } from '@/constants/characters';
 import { CharacterId } from '@/types/game';
 import { network } from '@/services/network';
 import { sounds } from '@/audio/soundEffects';
+import { CharacterAvatar } from '@/components/Common/CharacterAvatar';
 
 interface LobbyScreenProps {
   onStartHost: () => void;
@@ -219,12 +220,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                     key={p.id}
                     className="p-3 rounded-2xl bg-slate-800 border border-white/10 flex items-center gap-3 animate-fade-in"
                   >
-                    <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 font-bold border-2"
-                      style={{ backgroundColor: `${char.color}22`, borderColor: char.neonColor }}
-                    >
-                      {char.avatar}
-                    </div>
+                    <CharacterAvatar characterId={p.characterId} size="md" />
                     <div className="min-w-0">
                       <div className="text-sm font-bold text-white truncate">{p.name}</div>
                       <div className="text-xs text-slate-400">{char.name}</div>
@@ -319,13 +315,13 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                     type="button"
                     key={char.id}
                     onClick={() => setSelectedCharacter(char.id)}
-                    className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all ${
+                    className={`p-2 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all ${
                       isSelected
-                        ? 'bg-cyan-500/30 border-cyan-400 ring-2 ring-cyan-400 scale-105'
+                        ? 'bg-cyan-500/30 border-cyan-400 ring-2 ring-cyan-400 scale-105 shadow-md shadow-cyan-500/20'
                         : 'bg-slate-950 border-white/10 hover:bg-slate-800'
                     }`}
                   >
-                    <span className="text-2xl">{char.avatar}</span>
+                    <CharacterAvatar characterId={char.id} size="lg" showBorder={false} />
                     <span className="text-[11px] font-bold text-white">{char.name}</span>
                   </button>
                 );

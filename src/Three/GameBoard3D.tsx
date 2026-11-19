@@ -23,6 +23,11 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState, onSpaceClic
   // 3D Objects References
   const starMeshRef = useRef<THREE.Mesh | null>(null);
   const orbitalHaloRef = useRef<THREE.Points | null>(null);
+  const secondaryHaloRef = useRef<THREE.Points | null>(null);
+  const finishArchStarRef = useRef<THREE.Mesh | null>(null);
+  const stardustPointsRef = useRef<THREE.Points | null>(null);
+  const boostPadsRef = useRef<THREE.Mesh[]>([]);
+  const coinsRef = useRef<THREE.Group[]>([]);
   const diceGroupRef = useRef<THREE.Group | null>(null);
   const diceMeshesRef = useRef<THREE.Mesh[]>([]);
   const questionBlocksRef = useRef<THREE.Mesh[]>([]);
@@ -104,11 +109,11 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState, onSpaceClic
   };
 
   // Helper: Create Extruded 5-pointed Star Geometry
-  const createStarGeometry = (): THREE.BufferGeometry => {
+  const createStarGeometry = (scale: number = 1): THREE.BufferGeometry => {
     const starShape = new THREE.Shape();
     const points = 5;
-    const outerRadius = 1.3;
-    const innerRadius = 0.58;
+    const outerRadius = 1.3 * scale;
+    const innerRadius = 0.58 * scale;
 
     for (let i = 0; i < points * 2; i++) {
       const radius = i % 2 === 0 ? outerRadius : innerRadius;
@@ -121,13 +126,205 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState, onSpaceClic
     starShape.closePath();
 
     return new THREE.ExtrudeGeometry(starShape, {
-      depth: 0.35,
+      depth: 0.35 * scale,
       bevelEnabled: true,
       bevelSegments: 4,
       steps: 1,
-      bevelSize: 0.08,
-      bevelThickness: 0.08,
+      bevelSize: 0.08 * scale,
+      bevelThickness: 0.08 * scale,
     });
+  };
+
+  // Helper: Create Space Icon Decal Texture
+  const createSpaceIconTexture = (type: string, colorHex: string, neonHex: string): THREE.CanvasTexture => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d')!;
+
+    // Background radial glow
+    const grad = ctx.createRadialGradient(64, 64, 8, 64, 64, 62);
+    grad.addColorStop(0, '#FFFFFF');
+    grad.addColorStop(0.35, colorHex);
+    grad.addColorStop(1, neonHex);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(64, 64, 60, 0, Math.PI * 2);
+    ctx.fill();
+
+    // White outer ring
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 6;
+    ctx.stroke();
+
+    // Micro-inner ring
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(64, 64, 48, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Mario Party Icon symbol with drop shadow
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 54px "Fredoka", "Arial", sans-serif';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.lineWidth = 8;
+
+    let symbol = '★';
+    if (type === 'start') symbol = '★';
+    else if (type === 'green') symbol = '✔';
+    else if (type === 'yellow') symbol = '⚡';
+    else if (type === 'red') symbol = '✕';
+    else symbol = '?';
+
+    ctx.strokeText(symbol, 64, 66);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText(symbol, 64, 66);
+
+    return new THREE.CanvasTexture(canvas);
+  };
+
+  // Helper: Checkered Finish Line Texture
+  const createFinishLineTexture = (): THREE.CanvasTexture => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 32;
+    const ctx = canvas.getContext('2d')!;
+
+    const rows = 2;
+    const cols = 8;
+    const w = 128 / cols;
+    const h = 32 / rows;
+
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        ctx.fillStyle = (r + c) % 2 === 0 ? '#FFFFFF' : '#0B0F19';
+        ctx.fillRect(c * w, r * h, w, h);
+      }
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(1, 1);
+    return tex;
+  };
+
+  // Helper: Checkpoint Arch Banner Texture
+  const createBannerTexture = (): THREE.CanvasTexture => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d')!;
+
+    // Rainbow gold banner gradient
+    const grad = ctx.createLinearGradient(0, 0, 512, 0);
+    grad.addColorStop(0, '#DC2626');
+    grad.addColorStop(0.2, '#EA580C');
+    grad.addColorStop(0.5, '#FACC15');
+    grad.addColorStop(0.8, '#EA580C');
+    grad.addColorStop(1, '#DC2626');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 512, 128);
+
+    // Top & bottom checkered borders
+    const sqSize = 16;
+    for (let x = 0; x < 512; x += sqSize) {
+      ctx.fillStyle = (x / sqSize) % 2 === 0 ? '#FFFFFF' : '#111827';
+      ctx.fillRect(x, 0, sqSize, 12);
+      ctx.fillRect(x, 116, sqSize, 12);
+    }
+
+    // Outer frame stroke
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(6, 16, 500, 96);
+
+    // Main text
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '900 36px "Fredoka", "Arial Black", sans-serif';
+    ctx.strokeStyle = '#1E1B4B';
+    ctx.lineWidth = 8;
+    ctx.strokeText('★ SENDA ARCOÍRIS ★', 256, 50);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText('★ SENDA ARCOÍRIS ★', 256, 50);
+
+    ctx.font = 'bold 20px "Fredoka", sans-serif';
+    ctx.fillStyle = '#FEF08A';
+    ctx.fillText('🏁 META / CHECKPOINT 🏁', 256, 86);
+
+    return new THREE.CanvasTexture(canvas);
+  };
+
+  // Helper: Boost Pad Texture
+  const createBoostPadTexture = (): THREE.CanvasTexture => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d')!;
+
+    // Dark sleek carbon pad base
+    ctx.fillStyle = '#090D16';
+    ctx.fillRect(0, 0, 256, 128);
+
+    // Outer glowing border
+    ctx.strokeStyle = '#06B6D4';
+    ctx.lineWidth = 6;
+    ctx.strokeRect(4, 4, 248, 120);
+
+    // Glowing Neon Chevrons >>>
+    ctx.strokeStyle = '#22D3EE';
+    ctx.lineWidth = 14;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    const drawChevron = (x: number) => {
+      ctx.beginPath();
+      ctx.moveTo(x, 24);
+      ctx.lineTo(x + 36, 64);
+      ctx.lineTo(x, 104);
+      ctx.stroke();
+    };
+
+    drawChevron(40);
+    drawChevron(100);
+    drawChevron(160);
+
+    return new THREE.CanvasTexture(canvas);
+  };
+
+  // Helper: 3D Mario Coin Group
+  const createCoinGroup = (): THREE.Group => {
+    const coinGroup = new THREE.Group();
+
+    const coinMat = new THREE.MeshStandardMaterial({
+      color: 0xffd700,
+      emissive: 0xd97706,
+      emissiveIntensity: 0.5,
+      metalness: 0.95,
+      roughness: 0.15,
+      toneMapped: false,
+    });
+
+    // Outer coin rim cylinder
+    const outerCyl = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.07, 24), coinMat);
+    outerCyl.rotation.x = Math.PI / 2;
+    coinGroup.add(outerCyl);
+
+    // Inner embossed bar
+    const innerMat = new THREE.MeshStandardMaterial({
+      color: 0xfef08a,
+      emissive: 0xb45309,
+      emissiveIntensity: 0.35,
+      metalness: 0.85,
+      roughness: 0.25,
+    });
+    const innerBar = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.32, 0.085), innerMat);
+    coinGroup.add(innerBar);
+
+    return coinGroup;
   };
 
   // INITIALIZE THREE.JS SCENE
@@ -336,7 +533,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState, onSpaceClic
       scene.add(curbMesh);
     });
 
-    // 7. BOARD SPACES (20 Cylindrical Casillas)
+    // 7. BOARD SPACES (20 Mario Party Casillas with Decals & Glow)
     BOARD_SPACES.forEach((space) => {
       const pos = getSpacePosition(space.index, 0.03);
 
@@ -349,27 +546,44 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState, onSpaceClic
         color: space.colorHex,
         emissive: space.neonHex,
         emissiveIntensity: 0.5,
-        roughness: 0.3,
-        metalness: 0.5,
+        roughness: 0.25,
+        metalness: 0.4,
         toneMapped: false,
       });
       const cylMesh = new THREE.Mesh(cylGeo, cylMat);
       cylMesh.receiveShadow = true;
       spaceGroup.add(cylMesh);
 
-      // White perimeter ring
-      const ringGeo = new THREE.RingGeometry(0.54, 0.64, 24);
-      const ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+      // Top Icon Decal Plate
+      const iconTex = createSpaceIconTexture(space.type, space.colorHex, space.neonHex);
+      const topPlateGeo = new THREE.CircleGeometry(0.5, 24);
+      const topPlateMat = new THREE.MeshBasicMaterial({
+        map: iconTex,
+        transparent: true,
+      });
+      const topPlateMesh = new THREE.Mesh(topPlateGeo, topPlateMat);
+      topPlateMesh.rotation.x = -Math.PI / 2;
+      topPlateMesh.position.y = 0.035;
+      spaceGroup.add(topPlateMesh);
+
+      // Translucent glowing perimeter ring
+      const ringGeo = new THREE.RingGeometry(0.52, 0.62, 24);
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.85,
+      });
       const ringMesh = new THREE.Mesh(ringGeo, ringMat);
       ringMesh.rotation.x = -Math.PI / 2;
-      ringMesh.position.y = 0.035;
+      ringMesh.position.y = 0.038;
       spaceGroup.add(ringMesh);
 
       scene.add(spaceGroup);
     });
 
-    // 8. GIANT GOLDEN STAR & ORBITAL HALO IN CENTER
-    const starGeo = createStarGeometry();
+    // 8. GIANT GOLDEN STAR & DUAL COUNTER-ROTATING ORBITAL HALOS
+    const starGeo = createStarGeometry(1);
     const starMat = new THREE.MeshStandardMaterial({
       color: 0xffd700,
       emissive: 0xf59e0b,
@@ -384,22 +598,194 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState, onSpaceClic
     scene.add(starMesh);
     starMeshRef.current = starMesh;
 
-    // Glowing orbital halo around central star
+    // Primary Golden Orbital Halo (tilted +25 deg)
     const haloCount = 180;
     const haloGeo = new THREE.BufferGeometry();
     const haloPositions = new Float32Array(haloCount * 3);
     for (let i = 0; i < haloCount; i++) {
       const angle = (i / haloCount) * Math.PI * 2;
-      const rad = 2.4 + (Math.random() - 0.5) * 0.3;
+      const rad = 2.4 + (Math.random() - 0.5) * 0.25;
       haloPositions[i * 3] = Math.cos(angle) * rad;
-      haloPositions[i * 3 + 1] = 1.8 + (Math.random() - 0.5) * 0.2;
+      haloPositions[i * 3 + 1] = 1.8 + Math.sin(angle) * 0.6;
       haloPositions[i * 3 + 2] = Math.sin(angle) * rad;
     }
     haloGeo.setAttribute('position', new THREE.BufferAttribute(haloPositions, 3));
-    const haloMat = new THREE.PointsMaterial({ color: 0xffd700, size: 0.15, transparent: true, opacity: 0.75 });
+    const haloMat = new THREE.PointsMaterial({ color: 0xffd700, size: 0.15, transparent: true, opacity: 0.85 });
     const haloPoints = new THREE.Points(haloGeo, haloMat);
     scene.add(haloPoints);
     orbitalHaloRef.current = haloPoints;
+
+    // Secondary Cyan Orbital Halo (counter-tilted -25 deg)
+    const haloGeo2 = new THREE.BufferGeometry();
+    const haloPositions2 = new Float32Array(haloCount * 3);
+    for (let i = 0; i < haloCount; i++) {
+      const angle = (i / haloCount) * Math.PI * 2;
+      const rad = 2.7 + (Math.random() - 0.5) * 0.25;
+      haloPositions2[i * 3] = Math.cos(angle) * rad;
+      haloPositions2[i * 3 + 1] = 1.8 - Math.sin(angle) * 0.6;
+      haloPositions2[i * 3 + 2] = Math.sin(angle) * rad;
+    }
+    haloGeo2.setAttribute('position', new THREE.BufferAttribute(haloPositions2, 3));
+    const haloMat2 = new THREE.PointsMaterial({ color: 0x06b6d4, size: 0.14, transparent: true, opacity: 0.75 });
+    const haloPoints2 = new THREE.Points(haloGeo2, haloMat2);
+    scene.add(haloPoints2);
+    secondaryHaloRef.current = haloPoints2;
+
+    // 9. CHECKPOINT / FINISH ARCH (Meta Senda Arcoíris 🏁)
+    const archGroup = new THREE.Group();
+    archGroup.position.set(-3.7, 0, -3.9);
+
+    // Checkered Finish Line Strip on Track Ground
+    const finishLineTex = createFinishLineTexture();
+    const finishGroundGeo = new THREE.PlaneGeometry(0.65, 2.3);
+    const finishGroundMat = new THREE.MeshBasicMaterial({
+      map: finishLineTex,
+      side: THREE.DoubleSide,
+    });
+    const finishGround = new THREE.Mesh(finishGroundGeo, finishGroundMat);
+    finishGround.rotation.x = -Math.PI / 2;
+    finishGround.position.set(0, 0.02, 0);
+    archGroup.add(finishGround);
+
+    // Left and Right Arch Warp Columns
+    const archColMat = new THREE.MeshStandardMaterial({
+      color: 0xffd700,
+      emissive: 0xb45309,
+      emissiveIntensity: 0.4,
+      metalness: 0.95,
+      roughness: 0.15,
+    });
+    const columnGeo = new THREE.CylinderGeometry(0.12, 0.16, 2.5, 16);
+
+    const leftCol = new THREE.Mesh(columnGeo, archColMat);
+    leftCol.position.set(0, 1.25, -1.35);
+
+    const rightCol = new THREE.Mesh(columnGeo, archColMat);
+    rightCol.position.set(0, 1.25, 1.35);
+
+    // Glowing Neon Rings wrapping around columns
+    const neonRingMat1 = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+    const neonRingMat2 = new THREE.MeshBasicMaterial({ color: 0xff00cc });
+
+    for (let r = 0; r < 4; r++) {
+      const ringMesh1 = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.03, 8, 16), r % 2 === 0 ? neonRingMat1 : neonRingMat2);
+      ringMesh1.rotation.x = Math.PI / 2;
+      ringMesh1.position.set(0, 0.5 + r * 0.55, -1.35);
+
+      const ringMesh2 = ringMesh1.clone();
+      ringMesh2.position.z = 1.35;
+      archGroup.add(ringMesh1, ringMesh2);
+    }
+
+    // Overhead Arch Crossbar Beam
+    const crossbarGeo = new THREE.BoxGeometry(0.24, 0.18, 2.8);
+    const crossbar = new THREE.Mesh(crossbarGeo, archColMat);
+    crossbar.position.set(0, 2.45, 0);
+
+    // Double-sided Arch Banner
+    const bannerTex = createBannerTexture();
+    const bannerGeo = new THREE.PlaneGeometry(2.4, 0.62);
+    const bannerMat = new THREE.MeshBasicMaterial({ map: bannerTex, side: THREE.DoubleSide });
+    const bannerMesh = new THREE.Mesh(bannerGeo, bannerMat);
+    bannerMesh.position.set(0, 2.05, 0);
+    bannerMesh.rotation.y = Math.PI / 2; // Facing incoming traffic along X axis
+
+    // Glowing Star on Crown of Arch
+    const crownStarGeo = createStarGeometry(0.35);
+    const crownStarMat = new THREE.MeshStandardMaterial({
+      color: 0xffd700,
+      emissive: 0xf59e0b,
+      emissiveIntensity: 0.9,
+      metalness: 0.95,
+      roughness: 0.1,
+      toneMapped: false,
+    });
+    const crownStar = new THREE.Mesh(crownStarGeo, crownStarMat);
+    crownStar.position.set(0, 2.85, 0);
+    finishArchStarRef.current = crownStar;
+
+    archGroup.add(leftCol, rightCol, crossbar, bannerMesh, crownStar);
+    scene.add(archGroup);
+
+    // 10. MARIO KART BOOST PADS (Aceleradores Neón)
+    const boostTex = createBoostPadTexture();
+    const boostGeo = new THREE.PlaneGeometry(1.6, 1.1);
+    const boostMat1 = new THREE.MeshStandardMaterial({
+      map: boostTex,
+      emissive: 0x06b6d4,
+      emissiveIntensity: 0.8,
+      roughness: 0.2,
+      metalness: 0.8,
+      toneMapped: false,
+    });
+    const boostPadTop = new THREE.Mesh(boostGeo, boostMat1);
+    boostPadTop.rotation.x = -Math.PI / 2;
+    boostPadTop.rotation.z = 0; // pointing +X
+    boostPadTop.position.set(1.6, 0.025, -3.9);
+
+    const boostMat2 = boostMat1.clone();
+    const boostPadBottom = new THREE.Mesh(boostGeo, boostMat2);
+    boostPadBottom.rotation.x = -Math.PI / 2;
+    boostPadBottom.rotation.z = Math.PI; // pointing -X
+    boostPadBottom.position.set(-1.6, 0.025, 3.9);
+
+    scene.add(boostPadTop, boostPadBottom);
+    boostPadsRef.current = [boostPadTop, boostPadBottom];
+
+    // 11. 8 ROTATING 3D GOLDEN COINS
+    const coinCoords = [
+      { x: 5.6, y: 0.45, z: -2.6 },
+      { x: 7.4, y: 0.45, z: 0 },
+      { x: 5.6, y: 0.45, z: 2.6 },
+      { x: 0, y: 0.45, z: 3.9 },
+      { x: -5.6, y: 0.45, z: 2.6 },
+      { x: -7.4, y: 0.45, z: 0 },
+      { x: -5.6, y: 0.45, z: -2.6 },
+      { x: 0, y: 0.45, z: -3.9 },
+    ];
+    coinsRef.current = [];
+
+    coinCoords.forEach((c) => {
+      const coin = createCoinGroup();
+      coin.position.set(c.x, c.y, c.z);
+      scene.add(coin);
+      coinsRef.current.push(coin);
+    });
+
+    // 12. COSMIC STARDUST AMBIENT DRIFT PARTICLES
+    const dustCount = 220;
+    const dustGeo = new THREE.BufferGeometry();
+    const dustPositions = new Float32Array(dustCount * 3);
+    const dustColors = new Float32Array(dustCount * 3);
+
+    for (let i = 0; i < dustCount; i++) {
+      dustPositions[i * 3] = (Math.random() - 0.5) * 19;
+      dustPositions[i * 3 + 1] = 0.4 + Math.random() * 3.8;
+      dustPositions[i * 3 + 2] = (Math.random() - 0.5) * 12;
+
+      // Sparkling colors: cyan, yellow, pink, white
+      const cType = Math.random();
+      if (cType < 0.3) {
+        dustColors[i * 3] = 0.2; dustColors[i * 3 + 1] = 0.9; dustColors[i * 3 + 2] = 1.0;
+      } else if (cType < 0.6) {
+        dustColors[i * 3] = 1.0; dustColors[i * 3 + 1] = 0.85; dustColors[i * 3 + 2] = 0.2;
+      } else if (cType < 0.8) {
+        dustColors[i * 3] = 1.0; dustColors[i * 3 + 1] = 0.3; dustColors[i * 3 + 2] = 0.8;
+      } else {
+        dustColors[i * 3] = 1.0; dustColors[i * 3 + 1] = 1.0; dustColors[i * 3 + 2] = 1.0;
+      }
+    }
+    dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
+    dustGeo.setAttribute('color', new THREE.BufferAttribute(dustColors, 3));
+    const dustMat = new THREE.PointsMaterial({
+      size: 0.22,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.8,
+    });
+    const dustPoints = new THREE.Points(dustGeo, dustMat);
+    scene.add(dustPoints);
+    stardustPointsRef.current = dustPoints;
 
     // 9. WARP PIPES WITH PIRANHA PLANTS
     const pipeCoords = [
@@ -517,9 +903,34 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState, onSpaceClic
         starMeshRef.current.position.y = 1.8 + Math.sin(elapsedTime * 2) * 0.15;
       }
 
-      // Orbital Halo
+      // Orbital Halos (Primary Golden & Secondary Cyan)
       if (orbitalHaloRef.current) {
         orbitalHaloRef.current.rotation.y = -elapsedTime * 0.4;
+      }
+      if (secondaryHaloRef.current) {
+        secondaryHaloRef.current.rotation.y = elapsedTime * 0.35;
+      }
+
+      // Finish Arch Crown Star
+      if (finishArchStarRef.current) {
+        finishArchStarRef.current.rotation.y = elapsedTime * 1.5;
+      }
+
+      // 8 Golden Coins Spin & Bobbing
+      coinsRef.current.forEach((coin, idx) => {
+        coin.rotation.y = elapsedTime * 3.2 + idx * 0.4;
+        coin.position.y = 0.45 + Math.sin(elapsedTime * 3 + idx) * 0.08;
+      });
+
+      // Boost Pads Emissive Pulsing
+      boostPadsRef.current.forEach((pad) => {
+        const mat = pad.material as THREE.MeshStandardMaterial;
+        mat.emissiveIntensity = 0.7 + Math.sin(elapsedTime * 6) * 0.35;
+      });
+
+      // Cosmic Stardust Ambient Drift
+      if (stardustPointsRef.current) {
+        stardustPointsRef.current.rotation.y = elapsedTime * 0.05;
       }
 
       // Floating ? Blocks spin

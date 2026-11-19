@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useGame } from '@/context/GameContext';
 import { CHARACTERS } from '@/constants/characters';
+import { CharacterAvatar } from '@/components/Common/CharacterAvatar';
 import { ControllerScreen } from '@/components/Controller/ControllerScreen';
 
 export const PhoneSimulator: React.FC = () => {
@@ -17,12 +18,13 @@ export const PhoneSimulator: React.FC = () => {
   }, [autoFollowTurn, activePlayer, myPlayerId, setMyPlayerId]);
 
   return (
-    <div className="w-[380px] h-full bg-slate-900 border-l border-white/10 flex flex-col p-4 shadow-2xl shrink-0 z-30 select-none">
+    <div className="w-full h-full bg-slate-900/90 flex flex-col p-3 shadow-2xl z-30 select-none overflow-hidden">
       {/* Simulator Control Header */}
-      <div className="mb-3">
-        <div className="flex items-center justify-between mb-2">
-          <div className="text-[11px] font-pixel text-yellow-400 uppercase">
-            📱 JOY-PHONE SIMULADOR
+      <div className="mb-2 shrink-0">
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="text-[10px] font-pixel text-yellow-400 uppercase tracking-wider flex items-center gap-1.5">
+            <span>📱</span>
+            <span>JOY-PHONE SIMULADOR</span>
           </div>
           <label className="flex items-center gap-1.5 cursor-pointer text-xs text-slate-300">
             <input
@@ -31,7 +33,7 @@ export const PhoneSimulator: React.FC = () => {
               onChange={(e) => setAutoFollowTurn(e.target.checked)}
               className="rounded bg-slate-800 text-yellow-500 focus:ring-0"
             />
-            <span className="text-[11px]">Seguir Turno</span>
+            <span className="text-[10px] font-semibold">Seguir Turno</span>
           </label>
         </div>
 
@@ -49,16 +51,16 @@ export const PhoneSimulator: React.FC = () => {
                   setAutoFollowTurn(false);
                   setMyPlayerId(p.id);
                 }}
-                className={`py-1 rounded-lg text-sm flex flex-col items-center justify-center transition-all relative ${
+                className={`py-1 rounded-lg flex flex-col items-center justify-center transition-all relative ${
                   isSelected
                     ? 'bg-yellow-400/20 border border-yellow-400 shadow-sm scale-105'
                     : 'hover:bg-slate-800 opacity-60'
                 }`}
                 title={`${p.name} (${char.name})`}
               >
-                <span>{char.avatar}</span>
+                <CharacterAvatar characterId={p.characterId} size="sm" showBorder={false} />
                 {isTurn && (
-                  <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
                 )}
               </button>
             );
@@ -67,29 +69,30 @@ export const PhoneSimulator: React.FC = () => {
       </div>
 
       {/* Realistic Smartphone Frame Mockup */}
-      <div className="flex-1 w-full bg-slate-950 rounded-[38px] p-2.5 border-[6px] border-slate-700 shadow-2xl relative overflow-hidden flex flex-col ring-1 ring-white/10">
+      <div className="flex-1 w-full bg-slate-950 rounded-[34px] p-2 border-[5px] border-slate-700 shadow-2xl relative overflow-hidden flex flex-col ring-1 ring-white/10 min-h-0">
         {/* Dynamic Island / Speaker Notch */}
-        <div className="w-24 h-4 bg-slate-800 rounded-full mx-auto mb-1 shrink-0 flex items-center justify-center">
-          <div className="w-2 h-2 rounded-full bg-slate-900 mr-2" />
-          <div className="w-6 h-1 rounded-full bg-slate-900" />
+        <div className="w-20 h-3.5 bg-slate-800 rounded-full mx-auto mb-1 shrink-0 flex items-center justify-center">
+          <div className="w-1.5 h-1.5 rounded-full bg-slate-900 mr-1.5" />
+          <div className="w-5 h-1 rounded-full bg-slate-900" />
         </div>
 
         {/* Smartphone Screen Viewport */}
-        <div className="flex-1 w-full rounded-[28px] overflow-hidden bg-slate-950 relative flex flex-col">
+        <div className="flex-1 w-full rounded-[24px] overflow-hidden bg-slate-950 relative flex flex-col min-h-0">
           <ControllerScreen />
         </div>
 
         {/* Home Bar */}
-        <div className="w-24 h-1 bg-slate-600 rounded-full mx-auto mt-2 shrink-0" />
+        <div className="w-20 h-1 bg-slate-600 rounded-full mx-auto mt-1.5 shrink-0" />
       </div>
 
       {/* Demo Quick Shortcuts at bottom */}
-      <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] font-bold">
+      <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] font-bold shrink-0">
         <button
           onClick={() => rollDice()}
-          className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-amber-300 border border-amber-400/20"
+          className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-400/20 active:scale-95 transition-all text-center flex items-center justify-center gap-1"
         >
-          🎲 Tirar Dado
+          <span>🎲</span>
+          <span>Tirar Dado</span>
         </button>
         <button
           onClick={() => {
@@ -103,9 +106,10 @@ export const PhoneSimulator: React.FC = () => {
               content: '¡Excelente comunicación y ritmo en este sprint!',
             });
           }}
-          className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-emerald-300 border border-emerald-400/20"
+          className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-400/20 active:scale-95 transition-all text-center flex items-center justify-center gap-1"
         >
-          ⭐ +1 Tarjeta Rápida
+          <span>⭐</span>
+          <span>+1 Tarjeta Rápida</span>
         </button>
       </div>
     </div>

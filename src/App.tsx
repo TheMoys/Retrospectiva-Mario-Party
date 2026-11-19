@@ -70,14 +70,16 @@ const GameMain: React.FC = () => {
 
       {/* 4. MODO LOCAL / DEMO (Split-Screen: 3D Board on Left + Simulated Smartphone on Right) */}
       {view === 'demo' && (
-        <div className="w-full h-full flex overflow-hidden">
+        <div className="w-full h-full flex flex-row overflow-hidden bg-slate-950">
           {/* Left: Host TV 3D Viewport */}
-          <div className="flex-1 h-full relative">
+          <div className="flex-1 h-full min-w-0 relative">
             <HostScreen />
           </div>
 
           {/* Right: Phone Simulator */}
-          <PhoneSimulator />
+          <div className="w-[410px] max-w-[410px] h-full shrink-0 border-l border-white/10 z-40 bg-slate-900/95 shadow-2xl flex flex-col">
+            <PhoneSimulator />
+          </div>
         </div>
       )}
     </div>
