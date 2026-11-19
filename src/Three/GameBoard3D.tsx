@@ -96,7 +96,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     const starGroup = new THREE.Group();
     starGroup.name = 'mario_super_star';
 
-    // 5-pointed Star Shape with bevel
+    // 5-pointed Star Shape with bevel (Upright orientation)
     const starShape = new THREE.Shape();
     const points = 5;
     const outerRadius = 1.35;
@@ -104,7 +104,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
 
     for (let i = 0; i < points * 2; i++) {
       const radius = i % 2 === 0 ? outerRadius : innerRadius;
-      const angle = (i * Math.PI) / points - Math.PI / 2;
+      const angle = (i * Math.PI) / points + Math.PI / 2; // +PI/2 points the star straight UP
       const x = Math.cos(angle) * radius;
       const y = Math.sin(angle) * radius;
       if (i === 0) starShape.moveTo(x, y);
@@ -134,27 +134,27 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     starMesh.castShadow = true;
     starGroup.add(starMesh);
 
-    // Front & Back Iconic Black Oval Eyes with White Sparkle Pupils
+    // Front & Back Iconic Black Oval Eyes with White Sparkle Pupils (Centered in Upper Face)
     const createEyesGroup = (zPos: number) => {
       const eyesGroup = new THREE.Group();
       const eyeGeo = new THREE.CapsuleGeometry(0.065, 0.22, 12, 16);
       const eyeMat = new THREE.MeshBasicMaterial({ color: 0x0a0a0a });
 
       const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
-      leftEye.position.set(-0.25, 0.08, zPos);
+      leftEye.position.set(-0.25, 0.05, zPos);
 
       const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
-      rightEye.position.set(0.25, 0.08, zPos);
+      rightEye.position.set(0.25, 0.05, zPos);
 
       // White glint dots
       const glintGeo = new THREE.SphereGeometry(0.035, 8, 8);
       const glintMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
       const leftGlint = new THREE.Mesh(glintGeo, glintMat);
-      leftGlint.position.set(-0.23, 0.15, zPos + 0.04);
+      leftGlint.position.set(-0.23, 0.12, zPos + 0.04);
 
       const rightGlint = new THREE.Mesh(glintGeo, glintMat);
-      rightGlint.position.set(0.27, 0.15, zPos + 0.04);
+      rightGlint.position.set(0.27, 0.12, zPos + 0.04);
 
       eyesGroup.add(leftEye, rightEye, leftGlint, rightGlint);
       return eyesGroup;
@@ -458,11 +458,11 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     planetGroup.add(ringMesh);
     scene.add(planetGroup);
 
-    // 5C. Glowing Nebulae Dust Clouds
+    // 5C. Glowing Nebulae Dust Clouds (Positioned high in cosmic backdrop)
     const nebulae = [
-      { x: -16, y: 1, z: -20, color: 0x7e22ce, scale: 20 },
-      { x: 18, y: 4, z: -22, color: 0x0284c7, scale: 24 },
-      { x: 0, y: -7, z: -12, color: 0xec4899, scale: 18 },
+      { x: -18, y: 12, z: -35, color: 0x7e22ce, scale: 28 },
+      { x: 20, y: 15, z: -35, color: 0x0284c7, scale: 32 },
+      { x: 0, y: 18, z: -40, color: 0xec4899, scale: 30 },
     ];
     nebulae.forEach((neb) => {
       const cloudGeo = new THREE.PlaneGeometry(neb.scale, neb.scale);
@@ -821,13 +821,13 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
         activeSpotlightRef.current.scale.set(pulse, pulse, 1);
       }
 
-      // 7. Standees Idle Bobbing
+      // 7. 3D Volumetric Characters Idle Bobbing
       pawnsMapRef.current.forEach((pawn, playerId) => {
         const isMoving = gameState.phase === 'moving' && gameState.movement?.playerId === playerId;
         if (!isMoving) {
-          const standee = pawn.getObjectByName('standee_mesh');
-          if (standee) {
-            standee.position.y = 0.8 + Math.sin(elapsedTime * 3.0 + playerId.charCodeAt(0)) * 0.04;
+          const charBody = pawn.getObjectByName('char_body_group');
+          if (charBody) {
+            charBody.position.y = 0.16 + Math.sin(elapsedTime * 3.0 + playerId.charCodeAt(0)) * 0.03;
           }
         }
       });
@@ -848,6 +848,8 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
       if (animFrameId.current) cancelAnimationFrame(animFrameId.current);
       renderer.dispose();
       container.innerHTML = '';
+      pawnsMapRef.current.forEach((pawn) => scene.remove(pawn));
+      pawnsMapRef.current.clear();
     };
   }, []);
 
@@ -875,7 +877,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
       const charInfo = CHARACTERS[player.characterId];
       const pos = new THREE.Vector3();
       pawn.getWorldPosition(pos);
-      pos.y += 1.55; // Float directly above the 1.35 standee head
+      pos.y += 1.85; // Float directly above the 1.6 volumetric character head
 
       pos.project(camera);
 
@@ -928,15 +930,17 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
       spaceOccupancy[p.spaceIndex].push(p);
     });
 
-    // Add or update pawns
+    // Add or update pawns (Guaranteed inclusion in scene!)
     gameState.players.forEach((player) => {
       let pawn = pawnsMapRef.current.get(player.id);
       const charInfo = CHARACTERS[player.characterId];
 
-      if (!pawn) {
-        pawn = createCharacterPawn(player.characterId, charInfo.neonColor);
+      if (!pawn || pawn.parent !== scene) {
+        if (!pawn) {
+          pawn = createCharacterPawn(player.characterId, charInfo.neonColor);
+          pawnsMapRef.current.set(player.id, pawn);
+        }
         scene.add(pawn);
-        pawnsMapRef.current.set(player.id, pawn);
       }
 
       // Check if this pawn is actively hopping in movement phase
