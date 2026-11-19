@@ -44,11 +44,12 @@ const GameMain: React.FC = () => {
 
   return (
     <div className="relative w-screen h-screen bg-slate-950 text-white overflow-hidden font-game">
-      {/* Sound Toggle Button (Floating) */}
+      {/* Sound Toggle Button (Floating safely with 44x44px touch target) */}
       <button
         onClick={toggleSound}
-        className="fixed top-2.5 right-3 z-50 p-2 rounded-xl bg-slate-900/80 border border-white/20 text-xs hover:bg-slate-800 backdrop-blur-sm"
+        className="fixed bottom-4 left-4 z-50 w-11 h-11 rounded-2xl bg-slate-900/90 border border-white/20 text-sm hover:bg-slate-800 backdrop-blur-md flex items-center justify-center shadow-xl active:scale-95 transition-all"
         title={isMuted ? 'Activar Sonido' : 'Silenciar'}
+        aria-label={isMuted ? 'Activar Sonido' : 'Silenciar'}
       >
         {isMuted ? '🔇' : '🔊'}
       </button>

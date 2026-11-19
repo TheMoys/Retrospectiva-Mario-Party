@@ -46,8 +46,8 @@ export const PhoneSimulator: React.FC = () => {
           </label>
         </div>
 
-        {/* 2. 6 Players Switcher Bar */}
-        <div className="grid grid-cols-6 gap-1 bg-slate-950 p-1.5 rounded-2xl border border-white/10 shadow-inner">
+        {/* 2. Dynamic Players Switcher Bar */}
+        <div className="flex items-center gap-1 bg-slate-950 p-1.5 rounded-2xl border border-white/10 shadow-inner w-full">
           {gameState.players.map((p) => {
             const char = CHARACTERS[p.characterId];
             const isSelected = p.id === myPlayerId;
@@ -60,16 +60,16 @@ export const PhoneSimulator: React.FC = () => {
                   setAutoFollowTurn(false);
                   setMyPlayerId(p.id);
                 }}
-                className={`py-1 rounded-xl flex flex-col items-center justify-center transition-all relative ${
+                className={`flex-1 min-w-0 py-1.5 px-1 rounded-xl flex flex-col items-center justify-center transition-all relative ${
                   isSelected
                     ? 'bg-yellow-400/25 border-2 border-yellow-400 shadow-md scale-105'
-                    : 'hover:bg-slate-800/80 opacity-60 hover:opacity-100'
+                    : 'hover:bg-slate-800/80 opacity-70 hover:opacity-100'
                 }`}
                 title={`${p.name} (${char.name})`}
               >
                 <CharacterAvatar characterId={p.characterId} size="sm" showBorder={false} />
-                <span className="text-[8px] font-black text-white truncate max-w-[42px] mt-0.5">
-                  {p.name}
+                <span className="text-[9px] font-black text-white truncate w-full text-center mt-0.5">
+                  {p.name.split(' ')[0]}
                 </span>
                 {isTurn && (
                   <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
@@ -100,15 +100,8 @@ export const PhoneSimulator: React.FC = () => {
         <div className="w-20 h-1 bg-slate-600 rounded-full mx-auto mt-1.5 shrink-0" />
       </div>
 
-      {/* 4. Demo Quick Shortcuts */}
-      <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] font-bold shrink-0">
-        <button
-          onClick={() => rollDice()}
-          className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-400/20 active:scale-95 transition-all text-center flex items-center justify-center gap-1 shadow-sm"
-        >
-          <span>🎲</span>
-          <span>Tirar Dado Rápido</span>
-        </button>
+      {/* 4. Demo Quick Actions */}
+      <div className="mt-2 shrink-0">
         <button
           onClick={() => {
             if (!myPlayerId) return;
@@ -124,10 +117,10 @@ export const PhoneSimulator: React.FC = () => {
               recipientName: others[0]?.name,
             });
           }}
-          className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-400/20 active:scale-95 transition-all text-center flex items-center justify-center gap-1 shadow-sm"
+          className="w-full py-2 px-3 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-emerald-300 border border-emerald-400/25 active:scale-95 transition-all text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm min-h-[38px]"
         >
           <span>⭐</span>
-          <span>+1 Tarjeta Test</span>
+          <span>Simular Tarjeta de Sprint (+1 Estrella)</span>
         </button>
       </div>
     </div>

@@ -56,6 +56,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
   const questionBlocksRef = useRef<THREE.Mesh[]>([]);
   const piranhasRef = useRef<THREE.Group[]>([]);
   const starBitsRef = useRef<THREE.Points | null>(null);
+  const lastLabelsHashRef = useRef<string>('');
 
   // Helper: Create Mario Kart 8 Crystal Grid Texture for Rainbow Road
   const createCrystalGridTexture = (): THREE.CanvasTexture => {
@@ -763,15 +764,18 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     scene.add(activeSpotlight);
     activeSpotlightRef.current = activeSpotlight;
 
-    // Window Resize
+    // Window Resize with Dynamic FOV (Prevents cramping in split-screen/demo mode)
     const handleResize = () => {
       if (!container || !camera || !renderer) return;
       const w = container.clientWidth;
       const h = container.clientHeight;
-      camera.aspect = w / h;
+      const aspect = w / h;
+      camera.aspect = aspect;
+      camera.fov = aspect < 1.65 ? Math.min(Math.max(38 * (1.65 / aspect), 38), 54) : 38;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
     };
+    handleResize();
     window.addEventListener('resize', handleResize);
 
     // ANIMATION LOOP (60 FPS CHOREOGRAPHY)
@@ -831,8 +835,10 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
       // Render
       renderer.render(scene, camera);
 
-      // Update projected 2D screen positions for character labels
-      update2DLabels(camera, width, height);
+      // Update projected 2D screen positions for character labels with actual dimensions
+      const curW = container.clientWidth;
+      const curH = container.clientHeight;
+      update2DLabels(camera, curW, curH);
     };
 
     animate();
@@ -845,7 +851,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     };
   }, []);
 
-  // Update 2D Billboard Labels above characters
+  // Update 2D Billboard Labels above characters (Anti-Thrashing Zero-Stutter)
   const update2DLabels = (camera: THREE.PerspectiveCamera, width: number, height: number) => {
     if (!pawnsMapRef.current) return;
     const labels: Array<{
@@ -891,7 +897,13 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
       }
     });
 
-    setScreenLabels(labels);
+    const hash = labels
+      .map((l) => `${l.id}:${Math.round(l.x)}:${Math.round(l.y)}:${l.stars}:${l.isActive}`)
+      .join('|');
+    if (hash !== lastLabelsHashRef.current) {
+      lastLabelsHashRef.current = hash;
+      setScreenLabels(labels);
+    }
   };
 
   // SYNC 3D PAWNS WITH GAME STATE & TILE OFFSETTING

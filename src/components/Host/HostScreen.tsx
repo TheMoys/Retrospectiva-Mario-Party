@@ -32,8 +32,9 @@ export const HostScreen: React.FC = () => {
         <GameBoard3D gameState={gameState} />
 
         {/* Live Active Turn / Status Toast */}
+        {/* Active Toast Status Message */}
         {gameState.activeMessage && (
-          <div className="absolute top-3 left-1/2 transform -translate-x-1/2 z-20 pointer-events-none max-w-lg w-full px-4 text-center">
+          <div className="absolute top-16 left-1/2 transform -translate-x-1/2 z-20 pointer-events-none max-w-lg w-full px-4 text-center">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-900/90 border border-yellow-400/40 text-yellow-300 font-bold text-xs md:text-sm shadow-2xl backdrop-blur-md animate-fade-in">
               <span className="text-sm">📢</span>
               <span>{gameState.activeMessage}</span>
@@ -41,9 +42,9 @@ export const HostScreen: React.FC = () => {
           </div>
         )}
 
-        {/* Bottom Left Legend for Spaces (Matching mario party game.jpeg) */}
-        <div className="absolute bottom-4 left-4 z-20 hidden sm:flex flex-col gap-1.5 pointer-events-none">
-          <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-slate-900/80 border border-white/10 text-[10px] font-bold backdrop-blur-sm">
+        {/* Bottom Left Legend for Spaces (Compact & Clean) */}
+        <div className="absolute bottom-4 left-4 z-20 hidden sm:flex select-none pointer-events-none">
+          <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-slate-900/85 border border-white/10 text-[10px] font-bold backdrop-blur-md shadow-xl">
             <span className="flex items-center gap-1 text-emerald-400">
               <span className="w-2 h-2 rounded-full bg-emerald-400" /> Seguir
             </span>
@@ -56,10 +57,6 @@ export const HostScreen: React.FC = () => {
             <span className="flex items-center gap-1 text-purple-400">
               <span className="w-2 h-2 rounded-full bg-purple-400" /> Evento
             </span>
-          </div>
-
-          <div className="px-3 py-1 rounded-full bg-slate-900/80 border border-white/10 text-[10px] text-slate-300 backdrop-blur-sm">
-            🌈 ¡Senda Arcoíris 3D! 4 Rondas para la gloria.
           </div>
         </div>
 
