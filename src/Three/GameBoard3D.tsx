@@ -256,6 +256,57 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     return starGroup;
   };
 
+  // Helper: Create Radiant Celestial Cosmic Sky Gradient Texture
+  const createSkyCanvasTexture = (): THREE.CanvasTexture => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d')!;
+
+    // Rich cosmic gradient: deep indigo midnight at zenith, blooming into rich violet/magenta aurora, and warm horizon
+    const grad = ctx.createLinearGradient(0, 0, 0, 512);
+    grad.addColorStop(0.0, '#060a24'); // Interstellar deep navy zenith
+    grad.addColorStop(0.35, '#0e123d'); // Radiant royal blue
+    grad.addColorStop(0.65, '#24104e'); // Rich violet nebula bloom
+    grad.addColorStop(0.85, '#1e0c3a'); // Luminous deep purple
+    grad.addColorStop(1.0, '#120728'); // Cosmic horizon glow
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 512, 512);
+
+    // Glowing ethereal star-mist clouds in the background
+    const mist1 = ctx.createRadialGradient(256, 300, 20, 256, 300, 260);
+    mist1.addColorStop(0, 'rgba(147, 51, 234, 0.22)');
+    mist1.addColorStop(0.5, 'rgba(59, 130, 246, 0.12)');
+    mist1.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = mist1;
+    ctx.fillRect(0, 0, 512, 512);
+
+    const mist2 = ctx.createRadialGradient(380, 180, 10, 380, 180, 200);
+    mist2.addColorStop(0, 'rgba(236, 72, 153, 0.18)');
+    mist2.addColorStop(0.6, 'rgba(6, 182, 212, 0.08)');
+    mist2.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = mist2;
+    ctx.fillRect(0, 0, 512, 512);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    return texture;
+  };
+
+  // Helper: Create Soft Radial Nebula Glow Texture
+  const createRadialNebulaTexture = (innerColor: string, outerColor: string): THREE.CanvasTexture => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d')!;
+    const gradient = ctx.createRadialGradient(128, 128, 10, 128, 128, 128);
+    gradient.addColorStop(0, innerColor);
+    gradient.addColorStop(0.45, outerColor);
+    gradient.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 256, 256);
+    return new THREE.CanvasTexture(canvas);
+  };
+
   // Helper: Create Space Icon Decal Texture for Board Tiles
   const createSpaceIconTexture = (type: string, colorHex: string, neonHex: string): THREE.CanvasTexture => {
     const canvas = document.createElement('canvas');
@@ -426,9 +477,9 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     const width = container.clientWidth;
     const height = container.clientHeight;
 
-    // 1. Scene with Deep Cosmic Atmosphere
+    // 1. Scene with Radiant Celestial Cosmic Sky Atmosphere
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x060714);
+    scene.background = createSkyCanvasTexture();
     sceneRef.current = scene;
 
     // 2. Camera: Controllable with close-up default framing (FOV 38)
@@ -444,7 +495,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.18;
+    renderer.toneMappingExposure = 1.42; // Elevated exposure brings out vivid highlights & character details
     rendererRef.current = renderer;
 
     container.innerHTML = '';
@@ -461,15 +512,15 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     controls.target.set(0, 0.4, -0.4);
     controlsRef.current = controls;
 
-    // 4. Lights with Studio Radiance & Mario Kart Specular Depth
-    const ambientLight = new THREE.AmbientLight(0x38bdf8, 0.75);
+    // 4. Lights with High-Luminosity Studio Radiance & Mario Kart Specular Depth
+    const ambientLight = new THREE.AmbientLight(0xfff3e0, 1.25); // Warm daylight fill
     scene.add(ambientLight);
 
-    const hemiLight = new THREE.HemisphereLight(0xdbeafe, 0x1e1b4b, 0.65);
+    const hemiLight = new THREE.HemisphereLight(0xe0f2fe, 0x4c1d95, 1.10); // Sky light + warm purple bounce
     scene.add(hemiLight);
 
-    const mainSun = new THREE.DirectionalLight(0xffffff, 2.2);
-    mainSun.position.set(8, 24, 12);
+    const mainSun = new THREE.DirectionalLight(0xffffff, 2.85); // Brilliant overhead key light
+    mainSun.position.set(10, 26, 14);
     mainSun.castShadow = true;
     mainSun.shadow.mapSize.width = 2048;
     mainSun.shadow.mapSize.height = 2048;
@@ -482,17 +533,31 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     mainSun.shadow.camera.bottom = -16;
     scene.add(mainSun);
 
-    const magentaRim = new THREE.PointLight(0xd946ef, 4.0, 50);
-    magentaRim.position.set(-16, 8, -12);
+    // Front Camera Fill Light: Illuminates character faces and decals directly
+    const frontFill = new THREE.DirectionalLight(0xfff7ed, 1.45);
+    frontFill.position.set(0, 16, 18);
+    scene.add(frontFill);
+
+    const magentaRim = new THREE.PointLight(0xf43f5e, 5.0, 60);
+    magentaRim.position.set(-18, 9, -12);
     scene.add(magentaRim);
 
-    const cyanRim = new THREE.PointLight(0x06b6d4, 4.0, 50);
-    cyanRim.position.set(16, 8, 12);
+    const cyanRim = new THREE.PointLight(0x06b6d4, 5.0, 60);
+    cyanRim.position.set(18, 9, 12);
     scene.add(cyanRim);
 
-    const starCenterLight = new THREE.PointLight(0xfacc15, 2.5, 18);
+    const starCenterLight = new THREE.PointLight(0xfbbf24, 4.8, 24);
     starCenterLight.position.set(0, 2.6, 0);
     scene.add(starCenterLight);
+
+    // Warp Pipe Mouth Glow Lights
+    const pipeGreenLight = new THREE.PointLight(0x22c55e, 2.8, 10);
+    pipeGreenLight.position.set(-5.6, 1.4, 0.4);
+    scene.add(pipeGreenLight);
+
+    const pipeCyanLight = new THREE.PointLight(0x06b6d4, 2.8, 10);
+    pipeCyanLight.position.set(5.6, 1.4, -0.4);
+    scene.add(pipeCyanLight);
 
     // 5. SUPER MARIO GALAXY COSMIC BACKGROUND
     // 5A. 2,500 Chromatic Stars
@@ -561,19 +626,21 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     scene.add(planetGroup);
     planetGroupRef.current = planetGroup;
 
-    // 5C. Glowing Nebulae Dust Clouds (Positioned high in cosmic backdrop)
+    // 5C. Glowing Radial Nebulae Clouds (Expansive, Additive Blending)
     nebulaeMeshesRef.current = [];
     const nebulae = [
-      { x: -18, y: 12, z: -35, color: 0x7e22ce, scale: 28 },
-      { x: 20, y: 15, z: -35, color: 0x0284c7, scale: 32 },
-      { x: 0, y: 18, z: -40, color: 0xec4899, scale: 30 },
+      { x: -20, y: 13, z: -35, scale: 38, inner: 'rgba(168, 85, 247, 0.45)', outer: 'rgba(126, 34, 206, 0.15)' },
+      { x: 22, y: 15, z: -34, scale: 42, inner: 'rgba(6, 182, 212, 0.45)', outer: 'rgba(2, 132, 199, 0.12)' },
+      { x: 0, y: 19, z: -38, scale: 36, inner: 'rgba(244, 63, 94, 0.40)', outer: 'rgba(236, 72, 153, 0.12)' },
+      { x: -28, y: 8, z: -25, scale: 32, inner: 'rgba(251, 191, 36, 0.35)', outer: 'rgba(245, 158, 11, 0.08)' },
+      { x: 26, y: 10, z: -24, scale: 34, inner: 'rgba(99, 102, 241, 0.40)', outer: 'rgba(79, 70, 229, 0.10)' },
     ];
     nebulae.forEach((neb) => {
       const cloudGeo = new THREE.PlaneGeometry(neb.scale, neb.scale);
+      const nebTex = createRadialNebulaTexture(neb.inner, neb.outer);
       const cloudMat = new THREE.MeshBasicMaterial({
-        color: neb.color,
+        map: nebTex,
         transparent: true,
-        opacity: 0.25,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
         side: THREE.DoubleSide,
@@ -681,12 +748,12 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
       const laneMat = new THREE.MeshStandardMaterial({
         color: laneConfig.color,
         emissive: laneConfig.emissive,
-        emissiveIntensity: 0.95,
+        emissiveIntensity: 1.15,
         map: crystalTex,
-        roughness: 0.12,
-        metalness: 0.25,
+        roughness: 0.08,
+        metalness: 0.20,
         transparent: true,
-        opacity: 0.96,
+        opacity: 0.98,
         toneMapped: false, // True neon saturation!
       });
 
@@ -747,7 +814,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
         metalness: 0.95,
         roughness: 0.12,
         emissive: idx === 0 ? 0xff0044 : 0xaa00ff,
-        emissiveIntensity: 0.45,
+        emissiveIntensity: 0.55,
         toneMapped: false,
       });
       rainbowGroup.add(new THREE.Mesh(railGeo, railMat));
@@ -775,7 +842,8 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     const underglowMat = new THREE.MeshBasicMaterial({
       color: 0x38bdf8,
       transparent: true,
-      opacity: 0.35,
+      opacity: 0.55,
+      blending: THREE.AdditiveBlending,
       side: THREE.BackSide,
     });
     rainbowGroup.add(new THREE.Mesh(underglowGeo, underglowMat));
@@ -794,9 +862,9 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
       const cylMat = new THREE.MeshStandardMaterial({
         color: space.colorHex,
         emissive: space.neonHex,
-        emissiveIntensity: 0.65,
-        roughness: 0.20,
-        metalness: 0.40,
+        emissiveIntensity: 0.85,
+        roughness: 0.15,
+        metalness: 0.35,
         toneMapped: false,
       });
       const cylMesh = new THREE.Mesh(cylGeo, cylMat);
@@ -807,7 +875,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
       // Top decal
       const iconTex = createSpaceIconTexture(space.type, space.colorHex, space.neonHex);
       const topPlateGeo = new THREE.CircleGeometry(0.60, 28);
-      const topPlateMat = new THREE.MeshBasicMaterial({ map: iconTex, transparent: true });
+      const topPlateMat = new THREE.MeshBasicMaterial({ map: iconTex, transparent: true, toneMapped: false });
       const topPlateMesh = new THREE.Mesh(topPlateGeo, topPlateMat);
       topPlateMesh.rotation.x = -Math.PI / 2;
       topPlateMesh.position.y = 0.035;
@@ -815,7 +883,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
 
       // White perimeter rim
       const ringGeo = new THREE.RingGeometry(0.61, 0.70, 28);
-      const ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, toneMapped: false });
       const ringMesh = new THREE.Mesh(ringGeo, ringMat);
       ringMesh.rotation.x = -Math.PI / 2;
       ringMesh.position.y = 0.038;
@@ -828,6 +896,21 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     const superStar = createMarioSuperStar();
     scene.add(superStar);
     starMeshRef.current = superStar;
+
+    // Radiant Golden Floor Pool under Super Star
+    const goldenPoolGeo = new THREE.PlaneGeometry(6.6, 6.6);
+    const goldenPoolTex = createRadialNebulaTexture('rgba(250, 204, 21, 0.48)', 'rgba(234, 88, 12, 0.10)');
+    const goldenPoolMat = new THREE.MeshBasicMaterial({
+      map: goldenPoolTex,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const goldenPoolMesh = new THREE.Mesh(goldenPoolGeo, goldenPoolMat);
+    goldenPoolMesh.rotation.x = -Math.PI / 2;
+    goldenPoolMesh.position.y = 0.015;
+    scene.add(goldenPoolMesh);
 
     // Glowing white circular floor halo
     const floorRingGeo = new THREE.RingGeometry(2.6, 2.82, 64);
@@ -967,12 +1050,12 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
 
       // 1C. Pulsing neon waves across rainbow lanes
       laneMaterialsRef.current.forEach((mat, idx) => {
-        mat.emissiveIntensity = 0.85 + Math.sin(elapsedTime * 2.8 + idx * 0.7) * 0.35;
+        mat.emissiveIntensity = 1.05 + Math.sin(elapsedTime * 2.8 + idx * 0.7) * 0.35;
       });
 
       // 1D. Rhythmic arcade neon pulse on board spaces
       spaceMaterialsRef.current.forEach((mat, idx) => {
-        mat.emissiveIntensity = 0.55 + Math.sin(elapsedTime * 3.2 + idx * 0.35) * 0.25;
+        mat.emissiveIntensity = 0.80 + Math.sin(elapsedTime * 3.2 + idx * 0.35) * 0.28;
       });
 
       // 1E. Saturn planet and ring slow rotation
@@ -984,7 +1067,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
       nebulaeMeshesRef.current.forEach((mesh, idx) => {
         const mat = mesh.material as THREE.MeshBasicMaterial;
         if (mat) {
-          mat.opacity = 0.22 + Math.sin(elapsedTime * 1.2 + idx * 1.5) * 0.08;
+          mat.opacity = 0.38 + Math.sin(elapsedTime * 1.2 + idx * 1.5) * 0.12;
         }
       });
 

@@ -24,22 +24,25 @@ export function tryLoadGLTFCharacter(charId: CharacterId, onLoaded: (group: THRE
     (gltf) => {
       const rawScene = gltf.scene;
 
-      // 1. Enable shadows & ensure material visibility for all child meshes
+      // 1. Enable shadows, material brightness & double-sided rendering for all child meshes
       rawScene.traverse((child) => {
         if ((child as THREE.Mesh).isMesh) {
           child.castShadow = true;
           child.receiveShadow = true;
           const mesh = child as THREE.Mesh;
           if (mesh.material) {
-            if (Array.isArray(mesh.material)) {
-              mesh.material.forEach((m) => {
-                m.side = THREE.DoubleSide;
-                m.depthWrite = true;
-              });
-            } else {
-              mesh.material.side = THREE.DoubleSide;
-              mesh.material.depthWrite = true;
-            }
+            const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+            mats.forEach((m) => {
+              m.side = THREE.DoubleSide;
+              m.depthWrite = true;
+              // Lift material specular glossiness and prevent dark muddy shading
+              if ('roughness' in m && typeof (m as any).roughness === 'number') {
+                (m as any).roughness = Math.min((m as any).roughness, 0.40);
+              }
+              if ('metalness' in m && typeof (m as any).metalness === 'number') {
+                (m as any).metalness = Math.min((m as any).metalness, 0.25);
+              }
+            });
           }
         }
       });
@@ -114,9 +117,9 @@ export function createCharacterPawn(charId: CharacterId, neonColor: string): THR
   const baseMat = new THREE.MeshStandardMaterial({
     color: neonColor,
     emissive: neonColor,
-    emissiveIntensity: 0.8,
-    roughness: 0.15,
-    metalness: 0.75,
+    emissiveIntensity: 1.15,
+    roughness: 0.12,
+    metalness: 0.80,
     toneMapped: false,
   });
   const baseMesh = new THREE.Mesh(baseGeo, baseMat);
@@ -125,7 +128,7 @@ export function createCharacterPawn(charId: CharacterId, neonColor: string): THR
   baseMesh.receiveShadow = true;
   pawnGroup.add(baseMesh);
 
-  // Double perimeter gold rim
+  // Double perimeter luminous gold/white rim
   const rimGeo = new THREE.RingGeometry(0.29, 0.34, 32);
   const rimMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
   const rimMesh = new THREE.Mesh(rimGeo, rimMat);
