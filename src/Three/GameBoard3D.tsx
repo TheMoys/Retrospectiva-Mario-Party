@@ -3,7 +3,6 @@ import * as THREE from 'three';
 import { GameState, Player } from '@/types/game';
 import { BOARD_SPACES } from '@/constants/boardSpaces';
 import { CHARACTERS } from '@/constants/characters';
-import { CharacterAvatar } from '@/components/Common/CharacterAvatar';
 import {
   getTrackPoint,
   getSpacePosition,
@@ -17,6 +16,16 @@ interface GameBoard3DProps {
   gameState: GameState;
   onSpaceClick?: (spaceIndex: number) => void;
 }
+
+// 6 Authentic Mario Kart Rainbow Road Neon Lanes
+const RAINBOW_LANES = [
+  { id: 'red', color: 0xff0044, emissive: 0xff0033, name: 'Mario Red' },
+  { id: 'orange', color: 0xff6600, emissive: 0xff5500, name: 'Bowser Orange' },
+  { id: 'yellow', color: 0xffea00, emissive: 0xffcc00, name: 'Toad Yellow' },
+  { id: 'green', color: 0x00ff66, emissive: 0x00dd44, name: 'Luigi Green' },
+  { id: 'cyan', color: 0x00d4ff, emissive: 0x00aaff, name: 'Yoshi Cyan' },
+  { id: 'purple', color: 0xaa00ff, emissive: 0x8800ff, name: 'Peach Violet' },
+];
 
 export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
   const mountRef = useRef<HTMLDivElement>(null);
@@ -38,29 +47,59 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
   const animFrameId = useRef<number | null>(null);
 
   // 3D Objects References
-  const starMeshRef = useRef<THREE.Mesh | null>(null);
+  const starMeshRef = useRef<THREE.Group | null>(null);
   const orbitalRingRef = useRef<THREE.Mesh | null>(null);
   const pawnsMapRef = useRef<Map<string, THREE.Group>>(new Map());
   const activeSpotlightRef = useRef<THREE.Mesh | null>(null);
+  const activeLightBeamRef = useRef<THREE.Mesh | null>(null);
   const bananaMeshesRef = useRef<THREE.Group[]>([]);
   const questionBlocksRef = useRef<THREE.Mesh[]>([]);
   const piranhasRef = useRef<THREE.Group[]>([]);
+  const starBitsRef = useRef<THREE.Points | null>(null);
 
-  // Movement animation interpolation reference
-  const movementAnimRef = useRef<{
-    playerId: string;
-    fromSpace: number;
-    toSpace: number;
-    startTime: number;
-    duration: number;
-  } | null>(null);
+  // Helper: Create Mario Kart 8 Crystal Grid Texture for Rainbow Road
+  const createCrystalGridTexture = (): THREE.CanvasTexture => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d')!;
 
-  // Helper: Create Extruded 5-pointed Star Geometry
-  const createStarGeometry = (scale: number = 1): THREE.BufferGeometry => {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
+    ctx.fillRect(0, 0, 256, 256);
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(3, 3, 250, 250);
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(14, 14, 228, 228);
+
+    // Diagonal crystal reflection sheen
+    const grad = ctx.createLinearGradient(0, 0, 256, 256);
+    grad.addColorStop(0, 'rgba(255, 255, 255, 0.45)');
+    grad.addColorStop(0.5, 'rgba(255, 255, 255, 0.08)');
+    grad.addColorStop(1, 'rgba(255, 255, 255, 0.35)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 256, 256);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(1, 40);
+    return texture;
+  };
+
+  // Helper: Create Authentic Mario Super Star with Iconic Oval Black Eyes
+  const createMarioSuperStar = (): THREE.Group => {
+    const starGroup = new THREE.Group();
+    starGroup.name = 'mario_super_star';
+
+    // 5-pointed Star Shape with bevel
     const starShape = new THREE.Shape();
     const points = 5;
-    const outerRadius = 1.35 * scale;
-    const innerRadius = 0.62 * scale;
+    const outerRadius = 1.35;
+    const innerRadius = 0.62;
 
     for (let i = 0; i < points * 2; i++) {
       const radius = i % 2 === 0 ? outerRadius : innerRadius;
@@ -72,35 +111,88 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     }
     starShape.closePath();
 
-    return new THREE.ExtrudeGeometry(starShape, {
-      depth: 0.38 * scale,
+    const starGeo = new THREE.ExtrudeGeometry(starShape, {
+      depth: 0.44,
       bevelEnabled: true,
       bevelSegments: 4,
       steps: 1,
-      bevelSize: 0.08 * scale,
-      bevelThickness: 0.08 * scale,
+      bevelSize: 0.12,
+      bevelThickness: 0.12,
     });
+    starGeo.center();
+
+    const starMat = new THREE.MeshStandardMaterial({
+      color: 0xffd700,
+      emissive: 0xf59e0b,
+      emissiveIntensity: 0.85,
+      metalness: 0.85,
+      roughness: 0.15,
+      toneMapped: false,
+    });
+    const starMesh = new THREE.Mesh(starGeo, starMat);
+    starMesh.castShadow = true;
+    starGroup.add(starMesh);
+
+    // Front & Back Iconic Black Oval Eyes with White Sparkle Pupils
+    const createEyesGroup = (zPos: number) => {
+      const eyesGroup = new THREE.Group();
+      const eyeGeo = new THREE.CapsuleGeometry(0.065, 0.22, 12, 16);
+      const eyeMat = new THREE.MeshBasicMaterial({ color: 0x0a0a0a });
+
+      const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+      leftEye.position.set(-0.25, 0.08, zPos);
+
+      const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+      rightEye.position.set(0.25, 0.08, zPos);
+
+      // White glint dots
+      const glintGeo = new THREE.SphereGeometry(0.035, 8, 8);
+      const glintMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+      const leftGlint = new THREE.Mesh(glintGeo, glintMat);
+      leftGlint.position.set(-0.23, 0.15, zPos + 0.04);
+
+      const rightGlint = new THREE.Mesh(glintGeo, glintMat);
+      rightGlint.position.set(0.27, 0.15, zPos + 0.04);
+
+      eyesGroup.add(leftEye, rightEye, leftGlint, rightGlint);
+      return eyesGroup;
+    };
+
+    starGroup.add(createEyesGroup(0.34));
+    starGroup.add(createEyesGroup(-0.34));
+
+    // Golden Orbiting Torus Ring
+    const torusGeo = new THREE.TorusGeometry(2.2, 0.04, 16, 64);
+    const torusMat = new THREE.MeshBasicMaterial({
+      color: 0xfde047,
+      transparent: true,
+      opacity: 0.85,
+    });
+    const torusMesh = new THREE.Mesh(torusGeo, torusMat);
+    torusMesh.rotation.x = Math.PI / 2;
+    starGroup.add(torusMesh);
+
+    starGroup.position.set(0, 1.35, 0);
+    return starGroup;
   };
 
-  // Helper: Create Space Icon Decal Texture (Matching Reference)
+  // Helper: Create Space Icon Decal Texture for Board Tiles
   const createSpaceIconTexture = (type: string, colorHex: string, neonHex: string): THREE.CanvasTexture => {
     const canvas = document.createElement('canvas');
     canvas.width = 128;
     canvas.height = 128;
     const ctx = canvas.getContext('2d')!;
 
-    // Clean saturated disc
     ctx.fillStyle = colorHex;
     ctx.beginPath();
     ctx.arc(64, 64, 58, 0, Math.PI * 2);
     ctx.fill();
 
-    // White perimeter ring
     ctx.strokeStyle = '#FFFFFF';
     ctx.lineWidth = 6;
     ctx.stroke();
 
-    // Inner icon symbol
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.font = 'bold 54px "Fredoka", "Arial Black", sans-serif';
@@ -157,166 +249,408 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     return new THREE.CanvasTexture(canvas);
   };
 
+  // Helper: Create Authentic Warp Pipe with beveled lip & dark cavity
+  const createAuthenticWarpPipe = (colorHex: number, rimHex: number): THREE.Group => {
+    const pipeGroup = new THREE.Group();
+
+    // Body
+    const bodyGeo = new THREE.CylinderGeometry(0.72, 0.72, 1.2, 32);
+    const bodyMat = new THREE.MeshStandardMaterial({
+      color: colorHex,
+      roughness: 0.18,
+      metalness: 0.35,
+    });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.y = 0.6;
+    body.castShadow = true;
+    body.receiveShadow = true;
+    pipeGroup.add(body);
+
+    // Beveled Collar Lip
+    const lipGeo = new THREE.CylinderGeometry(0.84, 0.84, 0.38, 32);
+    const lipMat = new THREE.MeshStandardMaterial({
+      color: rimHex,
+      roughness: 0.15,
+      metalness: 0.4,
+    });
+    const lip = new THREE.Mesh(lipGeo, lipMat);
+    lip.position.y = 1.3;
+    lip.castShadow = true;
+    pipeGroup.add(lip);
+
+    // Dark cavity interior
+    const holeGeo = new THREE.CircleGeometry(0.68, 32);
+    const holeMat = new THREE.MeshBasicMaterial({ color: 0x051308 });
+    const hole = new THREE.Mesh(holeGeo, holeMat);
+    hole.rotation.x = -Math.PI / 2;
+    hole.position.y = 1.495;
+    pipeGroup.add(hole);
+
+    // Realistic Piranha Plant
+    const piranha = new THREE.Group();
+    piranha.name = 'piranha_head';
+
+    const stemGeo = new THREE.CylinderGeometry(0.12, 0.14, 0.8, 16);
+    const stemMat = new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.3 });
+    const stem = new THREE.Mesh(stemGeo, stemMat);
+    stem.position.y = 0.4;
+    piranha.add(stem);
+
+    const headGroup = new THREE.Group();
+    headGroup.position.y = 0.85;
+
+    const headGeo = new THREE.SphereGeometry(0.38, 20, 20);
+    const headMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.25 });
+    const headMesh = new THREE.Mesh(headGeo, headMat);
+    headGroup.add(headMesh);
+
+    // White lips
+    const lipTorusGeo = new THREE.TorusGeometry(0.32, 0.08, 12, 24, Math.PI);
+    const lipWhiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 });
+    const upperLip = new THREE.Mesh(lipTorusGeo, lipWhiteMat);
+    upperLip.position.set(0, 0.1, 0.22);
+    upperLip.rotation.x = 0.3;
+    headGroup.add(upperLip);
+
+    // Teeth
+    const toothGeo = new THREE.ConeGeometry(0.04, 0.1, 6);
+    for (let i = -2; i <= 2; i++) {
+      const tooth = new THREE.Mesh(toothGeo, lipWhiteMat);
+      tooth.position.set(i * 0.09, 0.06, 0.28);
+      tooth.rotation.x = Math.PI;
+      headGroup.add(tooth);
+    }
+
+    // White polka dots
+    const spotGeo = new THREE.CircleGeometry(0.065, 12);
+    const spotMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+    const spot1 = new THREE.Mesh(spotGeo, spotMat);
+    spot1.position.set(0.18, 0.24, 0.2);
+    spot1.lookAt(0.36, 0.48, 0.4);
+    const spot2 = spot1.clone();
+    spot2.position.set(-0.18, 0.24, 0.2);
+    spot2.lookAt(-0.36, 0.48, 0.4);
+    headGroup.add(spot1, spot2);
+
+    piranha.add(headGroup);
+    piranha.position.y = 0.35;
+    pipeGroup.add(piranha);
+
+    return pipeGroup;
+  };
+
   // INITIALIZE THREE.JS SCENE
   useEffect(() => {
-    if (!mountRef.current) return;
     const container = mountRef.current;
+    if (!container) return;
+
     const width = container.clientWidth;
     const height = container.clientHeight;
 
-    // 1. Scene
+    // 1. Scene with Deep Cosmic Atmosphere
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x070814); // Deep cosmic navy/black
+    scene.background = new THREE.Color(0x060714);
     sceneRef.current = scene;
 
-    // 2. Camera (Fixed Isometric Perspective matching Reference Screenshot)
-    const camera = new THREE.PerspectiveCamera(36, width / height, 0.1, 100);
-    camera.position.set(0, 16.5, 14.5);
-    camera.lookAt(0, -0.6, 0);
+    // 2. Camera (panoramic perspective FOV 38)
+    const camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 1000);
+    camera.position.set(0, 15.5, 13.8);
+    camera.lookAt(0, 0, -0.2);
     cameraRef.current = camera;
 
-    // 3. Renderer
+    // 3. High Quality Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.25;
-    container.innerHTML = '';
-    container.appendChild(renderer.domElement);
+    renderer.toneMappingExposure = 1.15;
     rendererRef.current = renderer;
 
-    // 4. Lighting Rig (Bright, vibrant, crisp shadows)
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.1);
+    container.innerHTML = '';
+    container.appendChild(renderer.domElement);
+
+    // 4. Lights
+    const ambientLight = new THREE.AmbientLight(0x38bdf8, 0.85);
     scene.add(ambientLight);
 
-    const mainSun = new THREE.DirectionalLight(0xfffaed, 2.2);
-    mainSun.position.set(6, 22, 10);
+    const mainSun = new THREE.DirectionalLight(0xffffff, 2.2);
+    mainSun.position.set(5, 18, 10);
     mainSun.castShadow = true;
     mainSun.shadow.mapSize.width = 2048;
     mainSun.shadow.mapSize.height = 2048;
-    mainSun.shadow.bias = -0.0004;
+    mainSun.shadow.bias = -0.0005;
     scene.add(mainSun);
 
-    // Magenta & Cyan soft rim highlights
-    const magentaRim = new THREE.PointLight(0xd946ef, 3.2, 30);
-    magentaRim.position.set(-10, 5, -8);
+    const magentaRim = new THREE.PointLight(0xd946ef, 3.5, 35);
+    magentaRim.position.set(-10, 6, -8);
     scene.add(magentaRim);
 
-    const cyanRim = new THREE.PointLight(0x06b6d4, 3.2, 30);
-    cyanRim.position.set(10, 5, 8);
+    const cyanRim = new THREE.PointLight(0x06b6d4, 3.5, 35);
+    cyanRim.position.set(10, 6, 8);
     scene.add(cyanRim);
 
-    // 5. Cosmic Starfield Background
-    const starCount = 1000;
-    const skyStarGeo = new THREE.BufferGeometry();
+    // 5. SUPER MARIO GALAXY COSMIC BACKGROUND
+    // 5A. 2,500 Chromatic Stars
+    const starCount = 2500;
+    const starGeo = new THREE.BufferGeometry();
     const starPositions = new Float32Array(starCount * 3);
+    const starColors = new Float32Array(starCount * 3);
+    const starPalette = [
+      new THREE.Color(0xffffff),
+      new THREE.Color(0x93c5fd),
+      new THREE.Color(0xfde047),
+      new THREE.Color(0xf472b6),
+      new THREE.Color(0x67e8f9),
+    ];
+
     for (let i = 0; i < starCount; i++) {
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
-      const dist = 40 + Math.random() * 25;
+      const dist = 45 + Math.random() * 35;
       starPositions[i * 3] = dist * Math.sin(phi) * Math.cos(theta);
-      starPositions[i * 3 + 1] = Math.abs(dist * Math.cos(phi)) + 4;
+      starPositions[i * 3 + 1] = Math.abs(dist * Math.cos(phi)) + 3;
       starPositions[i * 3 + 2] = dist * Math.sin(phi) * Math.sin(theta);
+
+      const c = starPalette[Math.floor(Math.random() * starPalette.length)];
+      starColors[i * 3] = c.r;
+      starColors[i * 3 + 1] = c.g;
+      starColors[i * 3 + 2] = c.b;
     }
-    skyStarGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
-    const skyStarMat = new THREE.PointsMaterial({ size: 0.32, color: 0xffffff, transparent: true, opacity: 0.8 });
-    scene.add(new THREE.Points(skyStarGeo, skyStarMat));
-
-    // 6. BUILD THE SLEEK OVAL TRACK (Matching mario party game.jpeg)
-    const samples = 240;
-    const trackWidth = 2.3;
-    const halfWidth = trackWidth / 2;
-
-    const trackGeo = new THREE.BufferGeometry();
-    const vertices: number[] = [];
-    const normals: number[] = [];
-    const uvs: number[] = [];
-    const indices: number[] = [];
-
-    for (let i = 0; i <= samples; i++) {
-      const t = i / samples;
-      const pt = getTrackPoint(t, 0);
-
-      const leftEdge = new THREE.Vector3().copy(pt.position).addScaledVector(pt.normal, -halfWidth);
-      const rightEdge = new THREE.Vector3().copy(pt.position).addScaledVector(pt.normal, halfWidth);
-
-      vertices.push(leftEdge.x, 0.01, leftEdge.z);
-      vertices.push(rightEdge.x, 0.01, rightEdge.z);
-
-      normals.push(0, 1, 0, 0, 1, 0);
-      uvs.push(0, t * 10, 1, t * 10);
-
-      if (i < samples) {
-        const row1 = i * 2;
-        const row2 = (i + 1) * 2;
-        indices.push(row1, row1 + 1, row2);
-        indices.push(row1 + 1, row2 + 1, row2);
-      }
-    }
-
-    trackGeo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-    trackGeo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-    trackGeo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-    trackGeo.setIndex(indices);
-
-    // Deep purple-navy satin surface
-    const trackMat = new THREE.MeshStandardMaterial({
-      color: 0x120e29,
-      emissive: 0x080614,
-      emissiveIntensity: 0.4,
-      roughness: 0.3,
-      metalness: 0.25,
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+    starGeo.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
+    const starMat = new THREE.PointsMaterial({
+      size: 0.42,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.88,
+      blending: THREE.AdditiveBlending,
     });
-    const trackMesh = new THREE.Mesh(trackGeo, trackMat);
-    trackMesh.receiveShadow = true;
-    scene.add(trackMesh);
+    scene.add(new THREE.Points(starGeo, starMat));
 
-    // Glowing Neon Magenta Curbs (Inner & Outer)
-    const curbOffsets = [-halfWidth, halfWidth];
-    curbOffsets.forEach((curbOffset) => {
-      const curbGeo = new THREE.BufferGeometry();
-      const curbVerts: number[] = [];
-      const curbNorms: number[] = [];
-      const curbIndices: number[] = [];
+    // 5B. 3D Ringed Planet (Saturn) in the Cosmic Horizon
+    const planetGroup = new THREE.Group();
+    planetGroup.position.set(-22, 11, -30);
+
+    const planetGeo = new THREE.SphereGeometry(4.0, 32, 32);
+    const planetMat = new THREE.MeshStandardMaterial({
+      color: 0x4338ca,
+      emissive: 0x312e81,
+      emissiveIntensity: 0.35,
+      roughness: 0.5,
+    });
+    planetGroup.add(new THREE.Mesh(planetGeo, planetMat));
+
+    const ringGeo = new THREE.RingGeometry(5.2, 9.2, 64);
+    const ringMat = new THREE.MeshStandardMaterial({
+      color: 0x38bdf8,
+      emissive: 0x0284c7,
+      emissiveIntensity: 0.5,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.75,
+    });
+    const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+    ringMesh.rotation.x = Math.PI / 3;
+    ringMesh.rotation.y = Math.PI / 6;
+    planetGroup.add(ringMesh);
+    scene.add(planetGroup);
+
+    // 5C. Glowing Nebulae Dust Clouds
+    const nebulae = [
+      { x: -16, y: 1, z: -20, color: 0x7e22ce, scale: 20 },
+      { x: 18, y: 4, z: -22, color: 0x0284c7, scale: 24 },
+      { x: 0, y: -7, z: -12, color: 0xec4899, scale: 18 },
+    ];
+    nebulae.forEach((neb) => {
+      const cloudGeo = new THREE.PlaneGeometry(neb.scale, neb.scale);
+      const cloudMat = new THREE.MeshBasicMaterial({
+        color: neb.color,
+        transparent: true,
+        opacity: 0.25,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      const cloudMesh = new THREE.Mesh(cloudGeo, cloudMat);
+      cloudMesh.position.set(neb.x, neb.y, neb.z);
+      scene.add(cloudMesh);
+    });
+
+    // 5D. Floating Star Bits Particle Dust
+    const starBitsCount = 80;
+    const starBitsGeo = new THREE.BufferGeometry();
+    const starBitsPos = new Float32Array(starBitsCount * 3);
+    for (let i = 0; i < starBitsCount; i++) {
+      starBitsPos[i * 3] = (Math.random() - 0.5) * 24;
+      starBitsPos[i * 3 + 1] = 0.5 + Math.random() * 4;
+      starBitsPos[i * 3 + 2] = (Math.random() - 0.5) * 16;
+    }
+    starBitsGeo.setAttribute('position', new THREE.BufferAttribute(starBitsPos, 3));
+    const starBitsMat = new THREE.PointsMaterial({
+      size: 0.28,
+      color: 0xfacc15,
+      transparent: true,
+      opacity: 0.75,
+      blending: THREE.AdditiveBlending,
+    });
+    const starBitsMesh = new THREE.Points(starBitsGeo, starBitsMat);
+    scene.add(starBitsMesh);
+    starBitsRef.current = starBitsMesh;
+
+    // 6. BUILD AUTHENTIC 6-LANE RAINBOW ROAD (SENDA ARCOÍRIS)
+    const samples = 360;
+    const laneCount = 6;
+    const laneWidth = 0.38; // Total width = 2.28
+    const halfTotalWidth = (laneCount * laneWidth) / 2;
+    const crystalTex = createCrystalGridTexture();
+
+    const rainbowGroup = new THREE.Group();
+    rainbowGroup.name = 'rainbow_road';
+
+    // 6A. 6 Vibrant Neon Ribbon Lanes with Crystal Texture
+    for (let laneIdx = 0; laneIdx < laneCount; laneIdx++) {
+      const laneConfig = RAINBOW_LANES[laneIdx];
+      const innerOffset = -halfTotalWidth + laneIdx * laneWidth;
+      const outerOffset = innerOffset + laneWidth;
+
+      const geo = new THREE.BufferGeometry();
+      const verts: number[] = [];
+      const norms: number[] = [];
+      const uvs: number[] = [];
+      const indices: number[] = [];
 
       for (let i = 0; i <= samples; i++) {
         const t = i / samples;
-        const pt = getTrackPoint(t, curbOffset);
-        const inner = new THREE.Vector3().copy(pt.position);
-        const outer = new THREE.Vector3().copy(pt.position).addScaledVector(pt.normal, curbOffset > 0 ? 0.12 : -0.12);
+        const ptIn = getTrackPoint(t, innerOffset);
+        const ptOut = getTrackPoint(t, outerOffset);
 
-        curbVerts.push(inner.x, 0.06, inner.z);
-        curbVerts.push(outer.x, 0.01, outer.z);
-        curbNorms.push(0, 1, 0, 0, 1, 0);
+        verts.push(ptIn.position.x, 0.02, ptIn.position.z);
+        verts.push(ptOut.position.x, 0.02, ptOut.position.z);
+
+        norms.push(0, 1, 0, 0, 1, 0);
+        uvs.push(0, t * 40, 1, t * 40);
 
         if (i < samples) {
           const r1 = i * 2;
           const r2 = (i + 1) * 2;
-          curbIndices.push(r1, r1 + 1, r2);
-          curbIndices.push(r1 + 1, r2 + 1, r2);
+          indices.push(r1, r1 + 1, r2);
+          indices.push(r1 + 1, r2 + 1, r2);
         }
       }
 
-      curbGeo.setAttribute('position', new THREE.Float32BufferAttribute(curbVerts, 3));
-      curbGeo.setAttribute('normal', new THREE.Float32BufferAttribute(curbNorms, 3));
-      curbGeo.setIndex(curbIndices);
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+      geo.setAttribute('normal', new THREE.Float32BufferAttribute(norms, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+      geo.setIndex(indices);
 
-      const curbMat = new THREE.MeshStandardMaterial({
-        color: 0xd946ef,
-        emissive: 0xc026d3,
-        emissiveIntensity: 0.9,
-        roughness: 0.2,
-        metalness: 0.4,
+      const laneMat = new THREE.MeshStandardMaterial({
+        color: laneConfig.color,
+        emissive: laneConfig.emissive,
+        emissiveIntensity: 0.85,
+        map: crystalTex,
+        roughness: 0.15,
+        metalness: 0.1,
+        transparent: true,
+        opacity: 0.94,
+        toneMapped: false, // True neon saturation!
+      });
+
+      const laneMesh = new THREE.Mesh(geo, laneMat);
+      laneMesh.receiveShadow = true;
+      rainbowGroup.add(laneMesh);
+    }
+
+    // 6B. Luminous White Fiber-Optic Lane Dividers (5 lines)
+    for (let divIdx = 1; divIdx < laneCount; divIdx++) {
+      const offset = -halfTotalWidth + divIdx * laneWidth;
+      const lineGeo = new THREE.BufferGeometry();
+      const lineVerts: number[] = [];
+
+      for (let i = 0; i <= samples; i++) {
+        const pt = getTrackPoint(i / samples, offset);
+        lineVerts.push(pt.position.x, 0.03, pt.position.z);
+      }
+      lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(lineVerts, 3));
+      const lineMat = new THREE.LineBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.85,
+      });
+      rainbowGroup.add(new THREE.Line(lineGeo, lineMat));
+    }
+
+    // 6C. Metallic Gold Chrome Curbs with Neon Glow Rails
+    const rails = [-halfTotalWidth - 0.05, halfTotalWidth + 0.05];
+    rails.forEach((railOffset, idx) => {
+      const railGeo = new THREE.BufferGeometry();
+      const railVerts: number[] = [];
+      const railIndices: number[] = [];
+
+      for (let i = 0; i <= samples; i++) {
+        const t = i / samples;
+        const pt = getTrackPoint(t, railOffset);
+        const outerPt = getTrackPoint(t, railOffset + (idx === 0 ? -0.15 : 0.15));
+
+        railVerts.push(pt.position.x, 0.12, pt.position.z);
+        railVerts.push(outerPt.position.x, 0.01, outerPt.position.z);
+
+        if (i < samples) {
+          const r1 = i * 2;
+          const r2 = (i + 1) * 2;
+          railIndices.push(r1, r1 + 1, r2);
+          railIndices.push(r1 + 1, r2 + 1, r2);
+        }
+      }
+
+      railGeo.setAttribute('position', new THREE.Float32BufferAttribute(railVerts, 3));
+      railGeo.computeVertexNormals();
+      railGeo.setIndex(railIndices);
+
+      const railMat = new THREE.MeshStandardMaterial({
+        color: 0xf59e0b,
+        metalness: 0.95,
+        roughness: 0.12,
+        emissive: idx === 0 ? 0xff0044 : 0xaa00ff,
+        emissiveIntensity: 0.45,
         toneMapped: false,
       });
-      scene.add(new THREE.Mesh(curbGeo, curbMat));
+      rainbowGroup.add(new THREE.Mesh(railGeo, railMat));
     });
 
-    // 7. BOARD SPACES (20 Circular Stepping Pads with Decals)
+    // 6D. Underside Cosmic Halo (Floating Underglow)
+    const underglowGeo = new THREE.BufferGeometry();
+    const ugVerts: number[] = [];
+    const ugIndices: number[] = [];
+    for (let i = 0; i <= samples; i++) {
+      const t = i / samples;
+      const ptIn = getTrackPoint(t, -halfTotalWidth - 0.2);
+      const ptOut = getTrackPoint(t, halfTotalWidth + 0.2);
+      ugVerts.push(ptIn.position.x, -0.05, ptIn.position.z);
+      ugVerts.push(ptOut.position.x, -0.05, ptOut.position.z);
+      if (i < samples) {
+        const r1 = i * 2;
+        const r2 = (i + 1) * 2;
+        ugIndices.push(r1, r1 + 1, r2);
+        ugIndices.push(r1 + 1, r2 + 1, r2);
+      }
+    }
+    underglowGeo.setAttribute('position', new THREE.Float32BufferAttribute(ugVerts, 3));
+    underglowGeo.setIndex(ugIndices);
+    const underglowMat = new THREE.MeshBasicMaterial({
+      color: 0x38bdf8,
+      transparent: true,
+      opacity: 0.35,
+      side: THREE.BackSide,
+    });
+    rainbowGroup.add(new THREE.Mesh(underglowGeo, underglowMat));
+
+    scene.add(rainbowGroup);
+
+    // 7. BOARD SPACES (20 Circular Stepping Discs)
     BOARD_SPACES.forEach((space) => {
-      const pos = getSpacePosition(space.index, 0.03);
+      const pos = getSpacePosition(space.index, 0.04);
       const spaceGroup = new THREE.Group();
       spaceGroup.position.copy(pos);
 
@@ -325,8 +659,8 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
       const cylMat = new THREE.MeshStandardMaterial({
         color: space.colorHex,
         emissive: space.neonHex,
-        emissiveIntensity: 0.45,
-        roughness: 0.3,
+        emissiveIntensity: 0.55,
+        roughness: 0.25,
         metalness: 0.35,
         toneMapped: false,
       });
@@ -354,29 +688,18 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
       scene.add(spaceGroup);
     });
 
-    // 8. GIANT GOLDEN STAR IN CENTER (Resting tilted as in Reference)
-    const starGeo = createStarGeometry(1.05);
-    const starMat = new THREE.MeshStandardMaterial({
-      color: 0xffd700,
-      emissive: 0xf59e0b,
-      emissiveIntensity: 0.7,
-      metalness: 0.95,
-      roughness: 0.15,
-      toneMapped: false,
-    });
-    const starMesh = new THREE.Mesh(starGeo, starMat);
-    starMesh.position.set(0, 0.5, 0);
-    starMesh.rotation.x = Math.PI / 2.4; // Tilted slightly upwards toward camera
-    scene.add(starMesh);
-    starMeshRef.current = starMesh;
+    // 8. AUTHENTIC 3D SUPER STAR IN CENTER (UPRIGHT WITH EYES)
+    const superStar = createMarioSuperStar();
+    scene.add(superStar);
+    starMeshRef.current = superStar;
 
-    // Glowing white circular ring on the floor beneath the central star
-    const floorRingGeo = new THREE.RingGeometry(2.2, 2.35, 64);
+    // Glowing white circular floor halo
+    const floorRingGeo = new THREE.RingGeometry(2.2, 2.38, 64);
     const floorRingMat = new THREE.MeshBasicMaterial({
       color: 0x93c5fd,
       side: THREE.DoubleSide,
       transparent: true,
-      opacity: 0.8,
+      opacity: 0.85,
     });
     const floorRingMesh = new THREE.Mesh(floorRingGeo, floorRingMat);
     floorRingMesh.rotation.x = -Math.PI / 2;
@@ -384,72 +707,59 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     scene.add(floorRingMesh);
     orbitalRingRef.current = floorRingMesh;
 
-    // 9. TWO WARP PIPES (Green on Left, Cyan on Right - Matching Reference)
-    const pipes = [
-      { x: -5.8, z: 0.2, color: 0x22c55e, rimColor: 0x16a34a },
-      { x: 5.8, z: -0.2, color: 0x06b6d4, rimColor: 0x0891b2 },
+    // 9. TWO AUTHENTIC WARP PIPES WITH ANIMATED PIRANHA PLANTS
+    const pipeConfigs = [
+      { x: -5.8, z: 0.2, color: 0x22c55e, rimColor: 0x16a34a }, // Green Left
+      { x: 5.8, z: -0.2, color: 0x06b6d4, rimColor: 0x0891b2 }, // Cyan Right
     ];
     piranhasRef.current = [];
 
-    pipes.forEach((p) => {
-      const pipeGroup = new THREE.Group();
-      pipeGroup.position.set(p.x, 0, p.z);
+    pipeConfigs.forEach((p) => {
+      const pipe = createAuthenticWarpPipe(p.color, p.rimColor);
+      pipe.position.set(p.x, 0, p.z);
+      scene.add(pipe);
 
-      const pipeBody = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.65, 0.65, 1.3, 24),
-        new THREE.MeshStandardMaterial({ color: p.color, roughness: 0.2, metalness: 0.4 })
-      );
-      pipeBody.position.y = 0.65;
-
-      const pipeLip = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.74, 0.74, 0.35, 24),
-        new THREE.MeshStandardMaterial({ color: p.rimColor, roughness: 0.2, metalness: 0.4 })
-      );
-      pipeLip.position.y = 1.35;
-      pipeGroup.add(pipeBody, pipeLip);
-
-      // Cute Piranha inside
-      const piranhaHead = new THREE.Mesh(
-        new THREE.SphereGeometry(0.3, 16, 16),
-        new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.3 })
-      );
-      piranhaHead.position.y = 1.3;
-      pipeGroup.add(piranhaHead);
-
-      scene.add(pipeGroup);
-      piranhasRef.current.push(pipeGroup);
+      const piranhaHead = pipe.getObjectByName('piranha_head') as THREE.Group;
+      if (piranhaHead) piranhasRef.current.push(piranhaHead);
     });
 
-    // 10. FOUR FLOATING ? BLOCKS
+    // 10. FOUR FLOATING GOLDEN '?' BLOCKS
     const qTex = createQuestionBlockTexture();
-    const qMaterials = Array(6).fill(new THREE.MeshStandardMaterial({ map: qTex, roughness: 0.2, metalness: 0.4 }));
-    const qBlockGeo = new THREE.BoxGeometry(0.65, 0.65, 0.65);
+    const qMaterials = Array(6).fill(new THREE.MeshStandardMaterial({
+      map: qTex,
+      roughness: 0.15,
+      metalness: 0.5,
+      emissive: 0xf59e0b,
+      emissiveIntensity: 0.35,
+    }));
+    const qBlockGeo = new THREE.BoxGeometry(0.72, 0.72, 0.72);
     const qBlockPositions = [
-      { x: -3.4, y: 1.6, z: -3.8 },
-      { x: 0, y: 1.6, z: -4.4 },
-      { x: 3.4, y: 1.6, z: -3.8 },
-      { x: 0, y: 1.6, z: 4.4 },
+      { x: -3.4, y: 1.8, z: -3.8 },
+      { x: 0, y: 1.8, z: -4.4 },
+      { x: 3.4, y: 1.8, z: -3.8 },
+      { x: 0, y: 1.8, z: 4.4 },
     ];
     questionBlocksRef.current = [];
 
     qBlockPositions.forEach((pos) => {
       const block = new THREE.Mesh(qBlockGeo, qMaterials);
       block.position.set(pos.x, pos.y, pos.z);
+      block.castShadow = true;
       scene.add(block);
       questionBlocksRef.current.push(block);
     });
 
-    // 11. ACTIVE TURN SPOTLIGHT RING (Under feet of current player)
-    const activeRingGeo = new THREE.RingGeometry(0.38, 0.48, 32);
+    // 11. ACTIVE TURN SPOTLIGHT RING (UNDER ACTIVE PLAYER FEET)
+    const activeRingGeo = new THREE.RingGeometry(0.48, 0.62, 32);
     const activeRingMat = new THREE.MeshBasicMaterial({
       color: 0xfacc15,
       side: THREE.DoubleSide,
       transparent: true,
-      opacity: 0.9,
+      opacity: 0.95,
     });
     const activeSpotlight = new THREE.Mesh(activeRingGeo, activeRingMat);
     activeSpotlight.rotation.x = -Math.PI / 2;
-    activeSpotlight.position.y = 0.05;
+    activeSpotlight.position.y = 0.055;
     scene.add(activeSpotlight);
     activeSpotlightRef.current = activeSpotlight;
 
@@ -464,30 +774,59 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     };
     window.addEventListener('resize', handleResize);
 
-    // ANIMATION LOOP
-    let clock = new THREE.Clock();
+    // ANIMATION LOOP (60 FPS CHOREOGRAPHY)
+    const clock = new THREE.Clock();
 
     const animate = () => {
       animFrameId.current = requestAnimationFrame(animate);
       const elapsedTime = clock.getElapsedTime();
 
-      // Gentle Star breathing / hover
+      // 1. Super Star: Upright floating + majestic continuous rotation
       if (starMeshRef.current) {
-        starMeshRef.current.rotation.z = Math.sin(elapsedTime * 1.5) * 0.08;
-        starMeshRef.current.position.y = 0.5 + Math.sin(elapsedTime * 2) * 0.08;
+        starMeshRef.current.position.y = 1.35 + Math.sin(elapsedTime * 2.2) * 0.18;
+        starMeshRef.current.rotation.y = elapsedTime * 0.85;
       }
 
-      // Question blocks floating & bobbing
+      // 2. Halo ring pulsation
+      if (orbitalRingRef.current) {
+        const s = 1 + Math.sin(elapsedTime * 3) * 0.05;
+        orbitalRingRef.current.scale.set(s, s, 1);
+      }
+
+      // 3. Question Blocks: Floating & rotating
       questionBlocksRef.current.forEach((block, idx) => {
         block.rotation.y = elapsedTime * 1.2 + idx * 0.8;
-        block.position.y = 1.6 + Math.sin(elapsedTime * 2.5 + idx) * 0.1;
+        block.position.y = 1.8 + Math.sin(elapsedTime * 2.5 + idx) * 0.12;
       });
 
-      // Active player spotlight ring pulsation
+      // 4. Piranha Plants: Smoothly bobbing in and out of warp pipes
+      piranhasRef.current.forEach((piranha, idx) => {
+        const peek = Math.sin(elapsedTime * 2.0 + idx * Math.PI);
+        piranha.position.y = 0.35 + Math.max(0, peek) * 0.45;
+        piranha.rotation.y = Math.sin(elapsedTime * 1.5 + idx) * 0.3;
+      });
+
+      // 5. Star bits floating dust drift
+      if (starBitsRef.current) {
+        starBitsRef.current.rotation.y = elapsedTime * 0.04;
+      }
+
+      // 6. Active player spotlight ring pulsation
       if (activeSpotlightRef.current) {
         const pulse = 1 + Math.sin(elapsedTime * 5) * 0.15;
         activeSpotlightRef.current.scale.set(pulse, pulse, 1);
       }
+
+      // 7. Standees Idle Bobbing
+      pawnsMapRef.current.forEach((pawn, playerId) => {
+        const isMoving = gameState.phase === 'moving' && gameState.movement?.playerId === playerId;
+        if (!isMoving) {
+          const standee = pawn.getObjectByName('standee_mesh');
+          if (standee) {
+            standee.position.y = 0.8 + Math.sin(elapsedTime * 3.0 + playerId.charCodeAt(0)) * 0.04;
+          }
+        }
+      });
 
       // Render
       renderer.render(scene, camera);
@@ -530,7 +869,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
       const charInfo = CHARACTERS[player.characterId];
       const pos = new THREE.Vector3();
       pawn.getWorldPosition(pos);
-      pos.y += 0.95; // Float directly above head
+      pos.y += 1.55; // Float directly above the 1.35 standee head
 
       pos.project(camera);
 
@@ -607,16 +946,16 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
       // Shield Aura
       let shieldMesh = pawn.getObjectByName('shield_aura') as THREE.Mesh;
       if (player.shieldActive && !shieldMesh) {
-        const auraGeo = new THREE.SphereGeometry(0.5, 16, 16);
+        const auraGeo = new THREE.SphereGeometry(0.7, 16, 16);
         const auraMat = new THREE.MeshBasicMaterial({
           color: 0x38bdf8,
           wireframe: true,
           transparent: true,
-          opacity: 0.6,
+          opacity: 0.65,
         });
         shieldMesh = new THREE.Mesh(auraGeo, auraMat);
         shieldMesh.name = 'shield_aura';
-        shieldMesh.position.y = 0.35;
+        shieldMesh.position.y = 0.75;
         pawn.add(shieldMesh);
       } else if (!player.shieldActive && shieldMesh) {
         pawn.remove(shieldMesh);
@@ -628,7 +967,7 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
     if (activePlayer && activeSpotlightRef.current) {
       const activePawn = pawnsMapRef.current.get(activePlayer.id);
       if (activePawn) {
-        activeSpotlightRef.current.position.set(activePawn.position.x, 0.04, activePawn.position.z);
+        activeSpotlightRef.current.position.set(activePawn.position.x, 0.045, activePawn.position.z);
         activeSpotlightRef.current.visible = true;
       }
     } else if (activeSpotlightRef.current) {
@@ -649,10 +988,16 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
       const bananaGroup = new THREE.Group();
       bananaGroup.position.copy(pos);
 
-      const peelGeo = new THREE.TorusGeometry(0.18, 0.05, 8, 16, Math.PI);
-      const peelMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.3 });
+      // Banana Peel 3D shape
+      const peelGeo = new THREE.ConeGeometry(0.18, 0.35, 12);
+      const peelMat = new THREE.MeshStandardMaterial({
+        color: 0xfacc15,
+        roughness: 0.3,
+        emissive: 0xca8a04,
+        emissiveIntensity: 0.4,
+      });
       const peelMesh = new THREE.Mesh(peelGeo, peelMat);
-      peelMesh.rotation.x = Math.PI / 2;
+      peelMesh.rotation.z = Math.PI / 4;
       bananaGroup.add(peelMesh);
 
       scene.add(bananaGroup);
@@ -661,36 +1006,45 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
   }, [gameState.traps]);
 
   return (
-    <div className="relative w-full h-full select-none overflow-hidden">
+    <div className="relative w-full h-full select-none overflow-hidden bg-slate-950">
       {/* Three.js Canvas Container */}
-      <div ref={mountRef} className="w-full h-full" />
+      <div ref={mountRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
 
-      {/* Floating 2D Billboard Badges for Characters (High Legibility & Anti-Slop) */}
-      {screenLabels.map((lbl) => (
+      {/* 2D Projected Floating Overhead Character Badges */}
+      {screenLabels.map((label) => (
         <div
-          key={lbl.id}
-          className="absolute pointer-events-none transform -translate-x-1/2 -translate-y-full transition-all duration-75 flex flex-col items-center"
-          style={{ left: `${lbl.x}px`, top: `${lbl.y}px` }}
+          key={label.id}
+          className={`absolute pointer-events-none transform -translate-x-1/2 -translate-y-full transition-opacity duration-150 ${
+            label.isActive ? 'scale-110 z-20 opacity-100' : 'opacity-90 z-10'
+          }`}
+          style={{
+            left: `${label.x}px`,
+            top: `${label.y}px`,
+          }}
         >
+          {/* Active Turn Arrow Indicator */}
+          {label.isActive && (
+            <div className="flex justify-center -mb-1 animate-bounce">
+              <span className="text-yellow-300 text-sm filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                ▼
+              </span>
+            </div>
+          )}
+
+          {/* Floating Pill Badge */}
           <div
-            className={`px-2.5 py-1 rounded-full text-[11px] font-black text-white shadow-xl flex items-center gap-1.5 border backdrop-blur-md transition-all ${
-              lbl.isActive
-                ? 'ring-2 ring-yellow-400 bg-slate-900/95 border-yellow-400 scale-110 shadow-yellow-500/30'
-                : 'bg-slate-950/85 border-white/20'
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-black shadow-2xl backdrop-blur-md transition-all ${
+              label.isActive
+                ? 'bg-slate-900/95 ring-2 ring-yellow-400 text-yellow-300 shadow-yellow-500/40'
+                : 'bg-slate-900/85 text-white border border-white/15'
             }`}
           >
-            {lbl.isLeader && <span className="text-xs animate-bounce">👑</span>}
-            <CharacterAvatar characterId={lbl.characterId} size="sm" showBorder={false} />
-            <span className="truncate max-w-[85px]">{lbl.name}</span>
-            <span className="px-1.5 py-0.2 rounded-full bg-black/50 text-[10px] text-yellow-300 font-black">
-              ★ {lbl.stars}
+            {label.isLeader && <span>👑</span>}
+            <span className="truncate max-w-[90px]">{label.name}</span>
+            <span className="text-yellow-400 flex items-center font-bold">
+              ★ {label.stars}
             </span>
           </div>
-
-          {/* Turn Arrow Indicator if active */}
-          {lbl.isActive && (
-            <div className="w-2 h-2 bg-yellow-400 rotate-45 transform -translate-y-1 shadow-md" />
-          )}
         </div>
       ))}
     </div>

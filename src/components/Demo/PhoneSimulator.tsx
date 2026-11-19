@@ -88,8 +88,11 @@ export const PhoneSimulator: React.FC = () => {
           <div className="w-5 h-1 rounded-full bg-slate-900" />
         </div>
 
-        {/* Smartphone Screen Viewport */}
-        <div className="flex-1 w-full rounded-[24px] overflow-hidden bg-slate-950 relative flex flex-col min-h-0">
+        {/* Smartphone Screen Viewport with strict isolation */}
+        <div
+          className="flex-1 w-full rounded-[24px] overflow-hidden bg-slate-950 relative flex flex-col min-h-0 shadow-inner"
+          style={{ transform: 'translateZ(0)', isolation: 'isolate' }}
+        >
           <ControllerScreen />
         </div>
 
