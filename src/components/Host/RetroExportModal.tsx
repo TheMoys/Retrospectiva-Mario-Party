@@ -78,7 +78,7 @@ export const RetroExportModal: React.FC<RetroExportModalProps> = ({ isOpen, onCl
 
   return (
     <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="w-full max-w-4xl max-h-[90vh] bg-slate-900 border-2 border-yellow-400/50 rounded-3xl p-6 shadow-2xl flex flex-col">
+      <div className="w-full max-w-4xl max-h-[90vh] bg-slate-900 border-2 border-yellow-400/50 rounded-3xl p-6 shadow-2xl flex flex-col animate-modal-spring">
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-white/10 shrink-0">
           <div>

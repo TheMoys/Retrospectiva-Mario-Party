@@ -29,7 +29,7 @@ export const BonusStarsModal: React.FC = () => {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in select-none">
-      <div className="w-full max-w-xl rounded-3xl border-2 border-yellow-400/80 p-6 md:p-8 shadow-2xl bg-gradient-to-b from-yellow-950 via-slate-900 to-slate-950 text-center flex flex-col items-center">
+      <div className="w-full max-w-xl rounded-3xl border-2 border-yellow-400/80 p-6 md:p-8 shadow-2xl bg-gradient-to-b from-yellow-950 via-slate-900 to-slate-950 text-center flex flex-col items-center animate-modal-spring">
         {/* Header */}
         <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-yellow-950/80 border border-yellow-400/40 text-xs font-bold text-yellow-300 mb-2">
           <span>🌟</span>

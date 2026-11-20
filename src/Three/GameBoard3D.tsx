@@ -1156,9 +1156,10 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
           const u = ((continuousK / TRACK_SPECS.totalSpaces) % 1 + 1) % 1;
           const pt = getTrackPoint(u, 0);
 
-          // Running cadence bounce: joyful parabolic hop for each tile
+          // Running cadence bounce: joyful ballistic hop with hang-time
           const fractionalStep = continuousK % 1;
-          const hopY = Math.sin(fractionalStep * Math.PI) * 0.36;
+          const tauHop = fractionalStep;
+          const hopY = Math.max(0, 4.0 * 0.44 * tauHop * Math.pow(1.0 - tauHop, 0.85));
 
           pawn.position.set(pt.position.x, 0.06 + hopY, pt.position.z);
 
@@ -1177,9 +1178,19 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
           // Squash & stretch cartoon physics on character body
           const charBody = pawn.getObjectByName('char_body_group');
           if (charBody) {
-            const stretch = 1.0 + Math.sin(fractionalStep * Math.PI) * 0.14;
-            const squash = 1.0 - Math.sin(fractionalStep * Math.PI) * 0.07;
-            charBody.scale.set(0.62 * squash, 0.62 * stretch, 0.62 * squash);
+            let stretchY = 1.0;
+            let squashXZ = 1.0;
+            if (tauHop < 0.15) {
+              stretchY = 0.86;
+              squashXZ = 1.12;
+            } else if (tauHop < 0.82) {
+              stretchY = 1.22;
+              squashXZ = 0.88;
+            } else {
+              stretchY = 0.88;
+              squashXZ = 1.08;
+            }
+            charBody.scale.set(0.62 * squashXZ, 0.62 * stretchY, 0.62 * squashXZ);
           }
 
           // Step sound and lap fanfare
@@ -1214,6 +1225,12 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
             charBody.scale.set(0.62, 0.62, 0.62);
             charBody.position.y = 0.09 + Math.sin(elapsedTime * 3.0 + playerId.charCodeAt(0)) * 0.025;
           }
+        }
+
+        // Rotate leader halo if present
+        const halo = pawn.getObjectByName('leader_halo');
+        if (halo) {
+          halo.rotation.z += 0.035;
         }
       });
 
@@ -1396,6 +1413,27 @@ export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {
         pawn.add(shieldMesh);
       } else if (!player.shieldActive && shieldMesh) {
         pawn.remove(shieldMesh);
+      }
+
+      // Leader Golden Halo (Volumetric 3D Torus rotating above head)
+      let leaderHalo = pawn.getObjectByName('leader_halo') as THREE.Mesh;
+      const isLeader = player.id === gameState.starLeaderId && player.stars > 0;
+      if (isLeader && !leaderHalo) {
+        const torusGeo = new THREE.TorusGeometry(0.24, 0.035, 12, 24);
+        const torusMat = new THREE.MeshStandardMaterial({
+          color: 0xffd700,
+          emissive: 0xffaa00,
+          emissiveIntensity: 0.9,
+          metalness: 0.8,
+          roughness: 0.2,
+        });
+        leaderHalo = new THREE.Mesh(torusGeo, torusMat);
+        leaderHalo.name = 'leader_halo';
+        leaderHalo.position.y = 0.88;
+        leaderHalo.rotation.x = Math.PI / 2;
+        pawn.add(leaderHalo);
+      } else if (!isLeader && leaderHalo) {
+        pawn.remove(leaderHalo);
       }
     });
 

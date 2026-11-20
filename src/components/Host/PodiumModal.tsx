@@ -21,7 +21,7 @@ export const PodiumModal: React.FC<PodiumModalProps> = ({ isOpen, onOpenRetroExp
   const rest = sortedPlayers.slice(3);
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/92 backdrop-blur-lg flex flex-col items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-slate-950/92 backdrop-blur-lg flex flex-col items-center justify-center p-4 animate-modal-spring">
       {/* Title */}
       <div className="text-center mb-8">
         <div className="text-sm font-pixel text-yellow-400 uppercase tracking-widest mb-1 animate-pulse">

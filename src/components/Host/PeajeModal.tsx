@@ -53,7 +53,7 @@ export const PeajeModal: React.FC = () => {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in select-none">
-      <div className="w-full max-w-xl rounded-3xl border-2 border-amber-500/80 p-6 md:p-8 shadow-2xl bg-gradient-to-b from-amber-950 via-slate-900 to-slate-950 flex flex-col">
+      <div className="w-full max-w-xl rounded-3xl border-2 border-amber-500/80 p-6 md:p-8 shadow-2xl bg-gradient-to-b from-amber-950 via-slate-900 to-slate-950 flex flex-col animate-modal-spring">
         {/* Header */}
         <div className="text-center mb-5">
           <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-950/80 border border-amber-400/40 text-xs font-bold text-amber-300 mb-2">

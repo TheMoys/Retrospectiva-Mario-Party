@@ -38,7 +38,9 @@ export const ControllerScreen: React.FC = () => {
 
   const handleRoll = () => {
     if (!isGameStarted || !isMyTurn || isRolling) return;
-    if (navigator.vibrate) navigator.vibrate(60);
+    if (navigator.vibrate) {
+      navigator.vibrate([20, 30, 20, 30, 50, 40, 90]);
+    }
     rollDice(me.id);
   };
 
@@ -107,7 +109,9 @@ export const ControllerScreen: React.FC = () => {
           onClick={handleRoll}
           disabled={!isGameStarted || !isMyTurn || isRolling}
           className={`relative w-32 h-32 sm:w-36 sm:h-36 rounded-3xl transition-all duration-150 flex flex-col items-center justify-center select-none active:scale-95 cursor-pointer shadow-2xl ${
-            isMyTurn && !isRolling
+            isRolling
+              ? 'animate-haptic-shake bg-gradient-to-tr from-amber-500 to-yellow-400 border-4 border-amber-800 text-amber-950'
+              : isMyTurn
               ? 'bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-300 border-4 border-amber-900 text-amber-950 hover:scale-103 ring-4 ring-yellow-400/50'
               : !isGameStarted
               ? 'bg-slate-900/90 border-2 border-dashed border-white/20 text-slate-500 cursor-not-allowed opacity-60'

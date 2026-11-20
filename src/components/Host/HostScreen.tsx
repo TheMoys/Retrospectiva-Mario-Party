@@ -11,12 +11,27 @@ import { TargetRouletteModal } from '@/components/Common/TargetRouletteModal';
 import { ChaosEventModal } from '@/components/Common/ChaosEventModal';
 import { BlockSmashMinigame } from '@/components/Minigames/BlockSmashMinigame';
 import { QuickVoteMinigame } from '@/components/Minigames/QuickVoteMinigame';
+import { MinigameIntroModal } from '@/components/Minigames/MinigameIntroModal';
+import { CinematicDiceOverlay } from '@/components/Common/CinematicDiceOverlay';
+import { RoundSelector } from './RoundSelector';
 import { getMobileJoinUrl, getQrCodeImageUrl } from '@/utils/networkUrl';
 import { network } from '@/services/network';
 import { CharacterId } from '@/types/game';
 
 export const HostScreen: React.FC = () => {
-  const { gameState, triggerMinigame, enterPeaje, enterPodium, nextTurn, resetGame, startGame, joinPlayer, setIsHost } = useGame();
+  const {
+    gameState,
+    triggerMinigame,
+    startMinigamePlay,
+    enterPeaje,
+    enterPodium,
+    nextTurn,
+    resetGame,
+    startGame,
+    joinPlayer,
+    setIsHost,
+    setTotalRounds,
+  } = useGame();
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [normasOpen, setNormasOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -100,11 +115,22 @@ export const HostScreen: React.FC = () => {
               </div>
               <button
                 onClick={handleCopyLink}
-                className="mt-1.5 w-full py-1 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-[10px] text-slate-300 border border-white/10 transition-all font-semibold"
+                className="mt-1.5 w-full py-1 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-[10px] text-slate-300 border border-white/10 transition-all font-semibold cursor-pointer"
               >
                 {copied ? '✓ Enlace Copiado' : '📋 Copiar Enlace Móvil'}
               </button>
             </div>
+          </div>
+        )}
+
+        {/* LOBBY ROUND SELECTOR CARD (Floating on top right during lobby phase) */}
+        {gameState.phase === 'lobby' && (
+          <div className="absolute top-20 right-6 z-30 max-w-sm sm:max-w-md w-full animate-fade-in hidden sm:block">
+            <RoundSelector
+              selectedRounds={gameState.totalRounds}
+              playerCount={gameState.players.length}
+              onChange={setTotalRounds}
+            />
           </div>
         )}
 
@@ -227,6 +253,24 @@ export const HostScreen: React.FC = () => {
         isOpen={normasOpen}
         onClose={() => setNormasOpen(false)}
       />
+
+      {/* Cinematic 3D Dice Tumbling Overlay */}
+      {gameState.phase === 'rolling' && (
+        <CinematicDiceOverlay
+          rolls={gameState.diceRoll}
+          playerName={gameState.players[gameState.activePlayerIndex]?.name || 'Jugador'}
+          isRolling={true}
+        />
+      )}
+
+      {/* Minigame Cinematic Instructions Modal */}
+      {gameState.phase === 'minigame' && gameState.minigame?.phase === 'instructions' && (
+        <MinigameIntroModal
+          type={gameState.minigame.type}
+          onFinishCountdown={startMinigamePlay}
+          isHost={true}
+        />
+      )}
 
       {/* Minigames Overlay */}
       {gameState.phase === 'minigame' && gameState.minigame?.type === 'block_smash' && (

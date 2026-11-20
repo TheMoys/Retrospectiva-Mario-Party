@@ -35,3 +35,105 @@
 .neon-border-rainbow {
   box-shadow: 0 0 20px rgba(0, 204, 255, 0.5), inset 0 0 15px rgba(153, 0, 255, 0.4);
 }
+
+/* 3D Dice Cinematic Tumbling & Impact */
+.dice-cube-container {
+  perspective: 1200px;
+}
+
+.dice-rolling {
+  animation: diceTumble 0.85s cubic-bezier(0.25, 0.1, 0.25, 1) infinite;
+}
+
+.dice-landed {
+  animation: diceImpact 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes diceTumble {
+  0% {
+    transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg) translateY(-10px) scale(0.95);
+  }
+  50% {
+    transform: rotateX(720deg) rotateY(540deg) rotateZ(180deg) translateY(-40px) scale(1.1);
+  }
+  100% {
+    transform: rotateX(1440deg) rotateY(1080deg) rotateZ(360deg) translateY(-10px) scale(0.95);
+  }
+}
+
+@keyframes diceImpact {
+  0% {
+    transform: scale(0.65) translateY(-60px);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.22, 0.78) translateY(8px); /* Squash on ground impact */
+  }
+  75% {
+    transform: scale(0.92, 1.1) translateY(-6px);  /* Elastic upward stretch */
+  }
+  100% {
+    transform: scale(1, 1) translateY(0);          /* Resting state */
+    opacity: 1;
+  }
+}
+
+/* Joy-Phone Tactile Haptic Shake */
+@keyframes phoneHapticShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px) rotate(-1.5deg); }
+  40% { transform: translateX(4px) rotate(1.5deg); }
+  60% { transform: translateX(-2px) rotate(-0.5deg); }
+  80% { transform: translateX(2px) rotate(0.5deg); }
+}
+
+.animate-haptic-shake {
+  animation: phoneHapticShake 0.12s linear infinite;
+}
+
+/* Unified Modal Spring Animation */
+@keyframes modalSpringIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.92) translateY(14px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-modal-spring {
+  animation: modalSpringIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Countdown Pop Animation (3.. 2.. 1.. ¡YA!) */
+@keyframes countdownPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.4) rotate(-6deg);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.25) rotate(2deg);
+  }
+  85% {
+    transform: scale(0.95) rotate(0deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.animate-countdown-pop {
+  animation: countdownPop 0.75s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes bounceSubtle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.animate-bounce-subtle {
+  animation: bounceSubtle 1.8s ease-in-out infinite;
+}

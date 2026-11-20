@@ -111,7 +111,7 @@ export const TargetRouletteModal: React.FC = () => {
   return (
     <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 md:p-6 animate-fade-in select-none">
       <div
-        className={`w-full max-w-xl rounded-3xl border-2 p-5 md:p-7 shadow-2xl bg-gradient-to-b ${theme.bgGradient} ${theme.borderColor} flex flex-col relative overflow-hidden`}
+        className={`w-full max-w-xl rounded-3xl border-2 p-5 md:p-7 shadow-2xl bg-gradient-to-b ${theme.bgGradient} ${theme.borderColor} flex flex-col relative overflow-hidden animate-modal-spring`}
       >
         {/* Top Header Badge */}
         <div className="text-center mb-4">

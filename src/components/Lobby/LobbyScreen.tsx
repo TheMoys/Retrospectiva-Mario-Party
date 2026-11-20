@@ -6,6 +6,7 @@ import { network } from '@/services/network';
 import { sounds } from '@/audio/soundEffects';
 import { CharacterAvatar } from '@/components/Common/CharacterAvatar';
 import { getMobileJoinUrl, getQrCodeImageUrl } from '@/utils/networkUrl';
+import { RoundSelector } from '@/components/Host/RoundSelector';
 
 interface LobbyScreenProps {
   onStartHost: () => void;
@@ -18,7 +19,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
   onStartController,
   onStartDemo,
 }) => {
-  const { gameState, createRoom, joinPlayer, setMyPlayerId, setIsHost, startGame } = useGame();
+  const { gameState, createRoom, joinPlayer, setMyPlayerId, setIsHost, startGame, setTotalRounds } = useGame();
   const [mode, setMode] = useState<'select' | 'host' | 'controller'>('select');
 
   // Controller Form State
@@ -209,6 +210,15 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                 {mobileJoinUrl}
               </div>
             </div>
+          </div>
+
+          {/* Round Duration Selector */}
+          <div className="w-full mt-4">
+            <RoundSelector
+              selectedRounds={gameState.totalRounds}
+              playerCount={gameState.players.length}
+              onChange={setTotalRounds}
+            />
           </div>
 
           {/* Connected Players Grid */}

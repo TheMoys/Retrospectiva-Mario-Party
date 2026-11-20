@@ -86,6 +86,7 @@ export interface MinigameState {
   active: boolean;
   type: MinigameType;
   title: string;
+  phase: 'instructions' | 'countdown' | 'playing' | 'results';
   question?: string;
   endsAt: number;
   countdown: number;
@@ -178,6 +179,7 @@ export interface GameState {
   activeMessage?: string;
   starLeaderId?: string;
   bonusStarsAwarded?: boolean;
+  seenMinigames?: Record<string, boolean>;
 }
 
 // Network message contracts for Jackbox-style real-time sync
@@ -186,6 +188,8 @@ export type NetworkAction =
   | { type: 'REQUEST_SYNC' }
   | { type: 'PEER_CONNECTED'; peerId: string }
   | { type: 'SYNC_STATE'; state: GameState }
+  | { type: 'SET_TOTAL_ROUNDS'; rounds: number }
+  | { type: 'START_MINIGAME_ACTION' }
   | { type: 'ROLL_DICE'; playerId: string }
   | { type: 'USE_POWERUP'; playerId: string; powerUp: PowerUpType; targetPlayerId?: string }
   | { type: 'SUBMIT_RETRO_CARD'; card: Omit<RetroCard, 'id' | 'timestamp'> }

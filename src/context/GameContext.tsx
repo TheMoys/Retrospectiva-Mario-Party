@@ -29,6 +29,7 @@ interface GameContextType {
   setIsHost: (isHost: boolean) => void;
   // Game Actions
   createRoom: (code?: string) => string;
+  setTotalRounds: (rounds: number) => void;
   joinPlayer: (name: string, characterId: CharacterId, role?: string) => Player;
   startGame: () => void;
   rollDice: (playerId?: string) => void;
@@ -37,6 +38,7 @@ interface GameContextType {
   resolveChaosEvent: (eventType: ChaosEventType) => void;
   submitRetroCard: (card: Omit<RetroCard, 'id' | 'timestamp'>) => void;
   triggerMinigame: (type: MinigameType) => void;
+  startMinigamePlay: () => void;
   submitMinigameTap: (playerId: string) => void;
   submitMinigameVote: (voterId: string, targetId: string) => void;
   finishMinigame: () => void;
@@ -99,6 +101,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     activeMessage: 'Esperando a que los jugadores se unan con su móvil...',
     starLeaderId: undefined,
     bonusStarsAwarded: false,
+    seenMinigames: {},
   }));
 
   const activeMovementTimer = useRef<NodeJS.Timeout | null>(null);
@@ -144,6 +147,16 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return newCode;
   }, [updateAndBroadcastState]);
 
+  // 1A. Set Total Rounds (Configurable in lobby before starting)
+  const setTotalRounds = useCallback((rounds: number) => {
+    const clamped = Math.max(1, Math.min(10, Math.floor(rounds)));
+    updateAndBroadcastState((prev) => ({
+      ...prev,
+      totalRounds: clamped,
+      maxTurns: clamped * Math.max(1, prev.players.length),
+    }));
+  }, [updateAndBroadcastState]);
+
   // 1B. Start Game (Host activates the board; turn begins!)
   const startGame = useCallback(() => {
     sounds.playStarFanfare();
@@ -156,6 +169,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         activePlayerIndex: 0,
         currentTurn: 1,
         round: 1,
+        maxTurns: prev.totalRounds * prev.players.length,
         activeMessage: `¡Arranca Sprint Party! Turno de ${firstPlayer.name} (${CHARACTERS[firstPlayer.characterId]?.name || ''}).`,
       };
     });
@@ -500,10 +514,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const nextIdx = (prev.activePlayerIndex + 1) % prev.players.length;
       const nextTurnNumber = prev.currentTurn + 1;
-      const newRound = Math.min(4, Math.floor((nextTurnNumber - 1) / Math.max(1, prev.players.length)) + 1);
+      const newRound = Math.min(prev.totalRounds, Math.floor((nextTurnNumber - 1) / Math.max(1, prev.players.length)) + 1);
 
-      // Check if 4 rounds are completed (turn 24)
-      const allRoundsCompleted = nextTurnNumber > prev.players.length * 4;
+      // Check if all configured rounds are completed
+      const allRoundsCompleted = nextTurnNumber > prev.players.length * prev.totalRounds;
 
       if (allRoundsCompleted) {
         const anyMissingMedals = updatedPlayers.some(
@@ -523,8 +537,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
 
-      // Check if a full round of 6 players ended
+      // Check if a full round of players ended
       const roundJustEnded = nextIdx === 0;
+      const autoMinigameType = newRound % 2 === 0 ? 'block_smash' : 'quick_vote';
+      const autoHasSeen = !!prev.seenMinigames?.[autoMinigameType];
 
       return {
         ...prev,
@@ -534,11 +550,13 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentTurn: nextTurnNumber,
         round: newRound,
         phase: roundJustEnded ? 'minigame' : 'turn_start',
+        seenMinigames: roundJustEnded ? { ...(prev.seenMinigames || {}), [autoMinigameType]: true } : prev.seenMinigames,
         minigame: roundJustEnded
           ? {
               active: true,
-              type: newRound % 2 === 0 ? 'block_smash' : 'quick_vote',
-              title: newRound % 2 === 0 ? '⚡ ¡Machaca el Bloque !' : '🗳️ ¿Quién del equipo...?',
+              type: autoMinigameType,
+              phase: autoHasSeen ? 'countdown' : 'instructions',
+              title: autoMinigameType === 'block_smash' ? '⚡ ¡Machaca el Bloque ?!' : '🗳️ ¿Quién del equipo...?',
               question: getRandomVoteQuestion().question,
               endsAt: Date.now() + 8000,
               countdown: 8,
@@ -742,23 +760,51 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Minigame Triggers & Actions
   const triggerMinigame = useCallback((type: MinigameType) => {
     sounds.playJump();
-    const minigameState: MinigameState = {
-      active: true,
-      type,
-      title: type === 'block_smash' ? '⚡ ¡Machaca el Bloque !' : '🗳️ ¿Quién del equipo...?',
-      question: type === 'quick_vote' ? getRandomVoteQuestion().question : undefined,
-      endsAt: Date.now() + 8000,
-      countdown: 8,
-      scores: {},
-      votes: {},
-    };
+    updateAndBroadcastState((prev) => {
+      const alreadySeen = !!prev.seenMinigames?.[type];
+      const initialPhase: 'instructions' | 'countdown' = alreadySeen ? 'countdown' : 'instructions';
+      const duration = type === 'block_smash' ? 8000 : 12000;
+      const endsAt = Date.now() + (initialPhase === 'instructions' ? 999999 : 3000 + duration);
 
-    updateAndBroadcastState((prev) => ({
-      ...prev,
-      phase: 'minigame',
-      minigame: minigameState,
-      activeMessage: `¡MINIJUEGO EXPRESS: ${minigameState.title}!`,
-    }));
+      const minigameState: MinigameState = {
+        active: true,
+        type,
+        title: type === 'block_smash' ? '⚡ ¡Machaca el Bloque ?!' : '🗳️ ¿Quién del equipo...?',
+        phase: initialPhase,
+        question: type === 'quick_vote' ? getRandomVoteQuestion().question : undefined,
+        endsAt,
+        countdown: initialPhase === 'instructions' ? 10 : 3,
+        scores: {},
+        votes: {},
+      };
+
+      const nextSeen = { ...(prev.seenMinigames || {}), [type]: true };
+
+      return {
+        ...prev,
+        phase: 'minigame',
+        minigame: minigameState,
+        seenMinigames: nextSeen,
+        activeMessage: `¡MINIJUEGO: ${minigameState.title}!`,
+      };
+    });
+  }, [updateAndBroadcastState]);
+
+  const startMinigamePlay = useCallback(() => {
+    sounds.playCoin();
+    updateAndBroadcastState((prev) => {
+      if (!prev.minigame) return prev;
+      const duration = prev.minigame.type === 'block_smash' ? 8000 : 12000;
+      return {
+        ...prev,
+        minigame: {
+          ...prev.minigame,
+          phase: 'countdown',
+          countdown: 3,
+          endsAt: Date.now() + 3000 + duration,
+        },
+      };
+    });
   }, [updateAndBroadcastState]);
 
   const submitMinigameTap = useCallback((playerId: string) => {
@@ -896,6 +942,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           network.broadcastToControllers({ type: 'SYNC_STATE', state: gameState });
         } else if (action.type === 'JOIN_ROOM') {
           joinPlayer(action.player.name, action.player.characterId);
+        } else if (action.type === 'SET_TOTAL_ROUNDS') {
+          setTotalRounds(action.rounds);
+        } else if (action.type === 'START_MINIGAME_ACTION') {
+          startMinigamePlay();
         } else if (action.type === 'ROLL_DICE') {
           rollDice(action.playerId);
         } else if (action.type === 'USE_POWERUP') {
@@ -913,7 +963,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => {
       unsubscribe();
     };
-  }, [isHost, gameState, joinPlayer, rollDice, usePowerUp, submitRetroCard, submitMinigameTap, submitMinigameVote]);
+  }, [isHost, gameState, joinPlayer, setTotalRounds, startMinigamePlay, rollDice, usePowerUp, submitRetroCard, submitMinigameTap, submitMinigameVote]);
 
   return (
     <GameContext.Provider
@@ -924,6 +974,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isHost,
         setIsHost,
         createRoom,
+        setTotalRounds,
         joinPlayer,
         startGame,
         rollDice,
@@ -932,6 +983,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         resolveChaosEvent,
         submitRetroCard,
         triggerMinigame,
+        startMinigamePlay,
         submitMinigameTap,
         submitMinigameVote,
         finishMinigame,

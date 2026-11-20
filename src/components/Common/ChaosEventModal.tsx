@@ -59,7 +59,7 @@ export const ChaosEventModal: React.FC = () => {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in select-none">
-      <div className="w-full max-w-lg rounded-3xl border-2 border-purple-500/70 p-6 md:p-8 shadow-2xl bg-gradient-to-b from-purple-950 via-slate-900 to-purple-950 text-center flex flex-col items-center">
+      <div className="w-full max-w-lg rounded-3xl border-2 border-purple-500/70 p-6 md:p-8 shadow-2xl bg-gradient-to-b from-purple-950 via-slate-900 to-purple-950 text-center flex flex-col items-center animate-modal-spring">
         {/* Badge */}
         <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-purple-950/80 border border-purple-400/40 text-xs font-bold text-purple-300 mb-3 shadow-inner">
           <span>🟣</span>

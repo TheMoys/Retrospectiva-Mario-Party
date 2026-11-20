@@ -14,7 +14,7 @@ export const BlockSmashMinigame: React.FC<BlockSmashProps> = ({ isController = f
   const [localTaps, setLocalTaps] = useState(0);
 
   useEffect(() => {
-    if (!minigame) return;
+    if (!minigame || minigame.phase === 'instructions') return;
 
     const interval = setInterval(() => {
       const remaining = Math.max(0, Math.ceil((minigame.endsAt - Date.now()) / 1000));
@@ -32,12 +32,32 @@ export const BlockSmashMinigame: React.FC<BlockSmashProps> = ({ isController = f
   }, [minigame, finishMinigame]);
 
   const handleTap = () => {
-    if (timeLeft <= 0) return;
+    if (timeLeft <= 0 || minigame?.phase === 'instructions') return;
     setLocalTaps((prev) => prev + 1);
     submitMinigameTap(myPlayerId);
   };
 
   if (!minigame) return null;
+
+  if (minigame.phase === 'instructions') {
+    if (isController) {
+      return (
+        <div className="fixed inset-0 z-50 bg-slate-950/95 flex flex-col items-center justify-center p-6 text-center select-none font-game animate-fade-in">
+          <div className="w-16 h-16 rounded-3xl bg-amber-500/20 border-2 border-amber-400 flex items-center justify-center text-3xl mb-3 animate-bounce-subtle">
+            ⚡
+          </div>
+          <span className="text-xs font-pixel text-yellow-300 uppercase tracking-widest mb-1">
+            Minijuego en Preparación
+          </span>
+          <h3 className="text-xl font-black text-white">¡Atento a la Pantalla Grande!</h3>
+          <p className="text-xs text-slate-400 mt-2 max-w-xs leading-relaxed">
+            El anfitrión está mostrando las instrucciones. ¡Prepárate para pulsar tu Joy-Phone!
+          </p>
+        </div>
+      );
+    }
+    return null;
+  }
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-4">

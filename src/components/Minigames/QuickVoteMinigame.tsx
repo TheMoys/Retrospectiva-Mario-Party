@@ -13,7 +13,7 @@ export const QuickVoteMinigame: React.FC<QuickVoteProps> = ({ isController = fal
   const [timeLeft, setTimeLeft] = useState(10);
 
   useEffect(() => {
-    if (!minigame) return;
+    if (!minigame || minigame.phase === 'instructions') return;
 
     const interval = setInterval(() => {
       const remaining = Math.max(0, Math.ceil((minigame.endsAt - Date.now()) / 1000));
@@ -33,12 +33,32 @@ export const QuickVoteMinigame: React.FC<QuickVoteProps> = ({ isController = fal
   }, [minigame, players.length, finishMinigame]);
 
   const handleVote = (targetId: string) => {
-    if (selectedTarget) return; // already voted
+    if (selectedTarget || minigame?.phase === 'instructions') return; // already voted or not started
     setSelectedTarget(targetId);
     submitMinigameVote(myPlayerId, targetId);
   };
 
   if (!minigame) return null;
+
+  if (minigame.phase === 'instructions') {
+    if (isController) {
+      return (
+        <div className="fixed inset-0 z-50 bg-slate-950/95 flex flex-col items-center justify-center p-6 text-center select-none font-game animate-fade-in">
+          <div className="w-16 h-16 rounded-3xl bg-cyan-500/20 border-2 border-cyan-400 flex items-center justify-center text-3xl mb-3 animate-bounce-subtle">
+            🗳️
+          </div>
+          <span className="text-xs font-pixel text-cyan-300 uppercase tracking-widest mb-1">
+            Votación en Preparación
+          </span>
+          <h3 className="text-xl font-black text-white">¡Atento a la Pantalla Grande!</h3>
+          <p className="text-xs text-slate-400 mt-2 max-w-xs leading-relaxed">
+            Lee la pregunta proyectada en la sala. En breve podrás votar a tu compañero favorito.
+          </p>
+        </div>
+      );
+    }
+    return null;
+  }
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-4">
