@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host",
+    "dev:tunnel": "node scripts/devWithTunnel.mjs",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },
