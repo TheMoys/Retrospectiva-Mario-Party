@@ -1,6 +1,7 @@
 import { defineConfig, Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import fs from 'fs';
 import type { IncomingMessage, ServerResponse } from 'http';
 
 function syncRelayPlugin(): Plugin {
@@ -86,6 +87,26 @@ function syncRelayPlugin(): Plugin {
           return;
         }
 
+        // Endpoint to discover active Cloudflare Tunnel URL for mobile data play
+        if (url.pathname === '/api/tunnel' && req.method === 'GET') {
+          res.writeHead(200, {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          });
+          try {
+            if (fs.existsSync('/tmp/cloudflared.log')) {
+              const text = fs.readFileSync('/tmp/cloudflared.log', 'utf-8');
+              const match = text.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/);
+              if (match) {
+                res.end(JSON.stringify({ active: true, url: match[0] }));
+                return;
+              }
+            }
+          } catch (e) {}
+          res.end(JSON.stringify({ active: false, url: null }));
+          return;
+        }
+
         next();
       });
     },
@@ -103,5 +124,6 @@ export default defineConfig({
   server: {
     port: 3000,
     host: true,
+    allowedHosts: true,
   },
 });

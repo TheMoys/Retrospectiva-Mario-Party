@@ -6,8 +6,13 @@
 // Host machine LAN IP detected on local network
 export const DEFAULT_LAN_IP = '172.22.101.100';
 
-export function getMobileJoinUrl(roomCode: string, overrideIp?: string): string {
+export function getMobileJoinUrl(roomCode: string, customBaseUrl?: string): string {
   if (typeof window === 'undefined') return '';
+
+  if (customBaseUrl) {
+    const base = customBaseUrl.replace(/\/$/, '');
+    return `${base}/?room=${roomCode}&mode=controller`;
+  }
 
   const protocol = window.location.protocol;
   const hostname = window.location.hostname;
@@ -16,7 +21,7 @@ export function getMobileJoinUrl(roomCode: string, overrideIp?: string): string 
 
   // If running on localhost or 127.0.0.1, use LAN IP so mobile phones can connect over Wi-Fi
   const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
-  const targetHost = overrideIp || (isLocal ? DEFAULT_LAN_IP : hostname);
+  const targetHost = isLocal ? DEFAULT_LAN_IP : hostname;
 
   return `${protocol}//${targetHost}${port}${pathname}?room=${roomCode}&mode=controller`;
 }

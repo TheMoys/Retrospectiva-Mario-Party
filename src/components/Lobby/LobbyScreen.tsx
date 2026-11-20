@@ -94,8 +94,29 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
     );
   };
 
+  // Discover active Cloudflare tunnel for mobile data (4G/5G) connections
+  const [tunnelUrl, setTunnelUrl] = useState<string | null>(null);
+  const [networkMode, setNetworkMode] = useState<'tunnel' | 'wifi'>('tunnel');
+
+  useEffect(() => {
+    fetch('/api/tunnel')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.active && data.url) {
+          setTunnelUrl(data.url);
+          setNetworkMode('tunnel');
+        } else {
+          setNetworkMode('wifi');
+        }
+      })
+      .catch(() => {
+        setNetworkMode('wifi');
+      });
+  }, []);
+
   // QR Code URL pointing to player controller with auto-filled room code
-  const mobileJoinUrl = getMobileJoinUrl(gameState.roomCode);
+  const activeBaseUrl = networkMode === 'tunnel' && tunnelUrl ? tunnelUrl : undefined;
+  const mobileJoinUrl = getMobileJoinUrl(gameState.roomCode, activeBaseUrl);
   const qrCodeImageUrl = getQrCodeImageUrl(mobileJoinUrl, 200);
 
   return (
@@ -197,9 +218,42 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
 
             {/* Room Code & URL */}
             <div className="flex-1 text-center md:text-left">
-              <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                Código de la Sala
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  Código de la Sala
+                </div>
+
+                {/* Network Mode Switcher */}
+                {tunnelUrl && (
+                  <div className="flex items-center bg-slate-950/80 p-0.5 rounded-xl border border-white/10 text-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => setNetworkMode('tunnel')}
+                      className={`px-2 py-1 rounded-lg font-bold transition-all flex items-center gap-1 ${
+                        networkMode === 'tunnel'
+                          ? 'bg-blue-600 text-white shadow'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <span>🌐</span>
+                      <span>Datos Móviles (4G/5G)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNetworkMode('wifi')}
+                      className={`px-2 py-1 rounded-lg font-bold transition-all flex items-center gap-1 ${
+                        networkMode === 'wifi'
+                          ? 'bg-amber-600 text-white shadow'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <span>📶</span>
+                      <span>Misma Wi-Fi</span>
+                    </button>
+                  </div>
+                )}
               </div>
+
               <div className="text-5xl md:text-6xl font-extrabold text-yellow-300 font-pixel tracking-widest my-2 text-stroke-sm">
                 {gameState.roomCode}
               </div>
@@ -209,6 +263,19 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
               <div className="mt-3 text-[11px] text-cyan-300 break-all bg-slate-950/70 p-2 rounded-xl border border-white/10 font-mono">
                 {mobileJoinUrl}
               </div>
+
+              {/* Network Requirement Explanatory Badge */}
+              {networkMode === 'tunnel' ? (
+                <div className="mt-2 text-[11px] text-blue-300 font-semibold flex items-center gap-1.5 bg-blue-500/15 border border-blue-400/30 px-3 py-1.5 rounded-xl">
+                  <span>🌐</span>
+                  <span>Modo Internet Activo: Puedes escanear y jugar con <strong>datos móviles (4G/5G)</strong> sin necesidad de Wi-Fi.</span>
+                </div>
+              ) : (
+                <div className="mt-2 text-[11px] text-amber-300 font-semibold flex items-center gap-1.5 bg-amber-500/15 border border-amber-400/30 px-3 py-1.5 rounded-xl">
+                  <span>⚠️</span>
+                  <span>Misma Wi-Fi requerida: Tu teléfono debe estar conectado a la <strong>misma red Wi-Fi</strong> que este PC.</span>
+                </div>
+              )}
             </div>
           </div>
 

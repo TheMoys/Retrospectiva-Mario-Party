@@ -44,7 +44,27 @@ export const HostScreen: React.FC = () => {
     });
   }, [gameState.roomCode, setIsHost]);
 
-  const mobileJoinUrl = getMobileJoinUrl(gameState.roomCode);
+  const [tunnelUrl, setTunnelUrl] = useState<string | null>(null);
+  const [networkMode, setNetworkMode] = useState<'tunnel' | 'wifi'>('tunnel');
+
+  useEffect(() => {
+    fetch('/api/tunnel')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.active && data.url) {
+          setTunnelUrl(data.url);
+          setNetworkMode('tunnel');
+        } else {
+          setNetworkMode('wifi');
+        }
+      })
+      .catch(() => {
+        setNetworkMode('wifi');
+      });
+  }, []);
+
+  const activeBaseUrl = networkMode === 'tunnel' && tunnelUrl ? tunnelUrl : undefined;
+  const mobileJoinUrl = getMobileJoinUrl(gameState.roomCode, activeBaseUrl);
   const qrCodeImageUrl = getQrCodeImageUrl(mobileJoinUrl, 200);
 
   const handleCopyLink = () => {
@@ -110,9 +130,39 @@ export const HostScreen: React.FC = () => {
             <div className="text-center w-full">
               <div className="text-[10px] uppercase font-bold text-slate-400">Escanea con tu móvil</div>
               <div className="text-2xl font-black text-yellow-300 tracking-wider font-pixel my-0.5">{gameState.roomCode}</div>
+
+              {/* Mode switch between Public Tunnel (4G/5G) and Wi-Fi */}
+              {tunnelUrl && (
+                <div className="flex items-center justify-center bg-slate-950/80 p-0.5 rounded-lg border border-white/10 text-[9px] my-1">
+                  <button
+                    type="button"
+                    onClick={() => setNetworkMode('tunnel')}
+                    className={`px-1.5 py-0.5 rounded font-bold transition-all ${
+                      networkMode === 'tunnel' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    🌐 4G/5G
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNetworkMode('wifi')}
+                    className={`px-1.5 py-0.5 rounded font-bold transition-all ${
+                      networkMode === 'wifi' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    📶 Wi-Fi
+                  </button>
+                </div>
+              )}
+
               <div className="text-[11px] font-bold text-cyan-300 bg-slate-950/80 px-2.5 py-1 rounded-xl border border-white/10 mt-1">
                 {gameState.players.length}/6 Jugadores
               </div>
+
+              <div className="text-[9px] text-slate-400 mt-1">
+                {networkMode === 'tunnel' ? '🌐 Datos móviles OK' : '📶 Misma Wi-Fi requerida'}
+              </div>
+
               <button
                 onClick={handleCopyLink}
                 className="mt-1.5 w-full py-1 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-[10px] text-slate-300 border border-white/10 transition-all font-semibold cursor-pointer"
