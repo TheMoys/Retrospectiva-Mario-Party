@@ -5,8 +5,10 @@ import fs from 'fs';
 import type { IncomingMessage, ServerResponse } from 'http';
 
 function syncRelayPlugin(): Plugin {
-  // Map of roomCode -> Set of ServerResponse (SSE clients)
-  const roomClients = new Map<string, Set<ServerResponse>>();
+  // Map of roomCode -> Set of ServerResponse (persists across Vite HMR)
+  const roomClients: Map<string, Set<ServerResponse>> =
+    (globalThis as any).__sprintPartyRoomClients ||
+    ((globalThis as any).__sprintPartyRoomClients = new Map());
 
   return {
     name: 'sprint-party-sync-relay',
@@ -30,9 +32,11 @@ function syncRelayPlugin(): Plugin {
           }
           const clients = roomClients.get(room)!;
           clients.add(res);
+          console.log(`[SYNC-RELAY] SSE Client connected to room "${room}". Total clients in room: ${clients.size}`);
 
           req.on('close', () => {
             clients.delete(res);
+            console.log(`[SYNC-RELAY] SSE Client disconnected from room "${room}". Remaining: ${clients.size}`);
             if (clients.size === 0) roomClients.delete(room);
           });
           return;
@@ -52,6 +56,9 @@ function syncRelayPlugin(): Plugin {
               const senderId = data.senderId || 'anon';
 
               const clients = roomClients.get(room);
+              const count = clients ? clients.size : 0;
+              console.log(`[SYNC-RELAY] Message received in room "${room}": action=${action?.type} from=${senderId} (Delivered to ${count} SSE listeners)`);
+
               if (clients) {
                 const payload = `data: ${JSON.stringify({ action, senderId })}\n\n`;
                 clients.forEach((client) => {
@@ -67,12 +74,23 @@ function syncRelayPlugin(): Plugin {
                 'Content-Type': 'application/json',
                 'Access-Control-Allow-Origin': '*',
               });
-              res.end(JSON.stringify({ ok: true, delivered: clients ? clients.size : 0 }));
+              res.end(JSON.stringify({ ok: true, delivered: count }));
             } catch (err: any) {
               res.writeHead(400, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ ok: false, error: err.message }));
             }
           });
+          return;
+        }
+
+        // Debug endpoint to inspect active SSE room subscribers
+        if (url.pathname === '/api/debug-rooms') {
+          const rooms: Record<string, number> = {};
+          for (const [r, set] of roomClients.entries()) {
+            rooms[r] = set.size;
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+          res.end(JSON.stringify(rooms));
           return;
         }
 

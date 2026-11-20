@@ -15,14 +15,25 @@ export const JoyPhoneSetup: React.FC<JoyPhoneSetupProps> = ({ initialRoomCode, o
   const { gameState, joinPlayer, setMyPlayerId, setIsHost } = useGame();
 
   const [roomCode, setRoomCode] = useState(() => {
-    if (initialRoomCode) return initialRoomCode.toUpperCase();
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const r = params.get('room');
       if (r) return r.toUpperCase();
     }
+    if (initialRoomCode) return initialRoomCode.toUpperCase();
     return gameState.roomCode || 'STAR';
   });
+
+  // Sync roomCode from URL search params whenever URL or initialRoomCode changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const r = params.get('room');
+      if (r) {
+        setRoomCode(r.toUpperCase());
+      }
+    }
+  }, [initialRoomCode]);
 
   const [name, setName] = useState('');
   const [selectedChar, setSelectedChar] = useState<CharacterId>('mario');

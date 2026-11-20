@@ -131,7 +131,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 1. Create Room (Fresh empty room waiting for mobile players)
   const createRoom = useCallback((code?: string): string => {
-    const newCode = code ? code.toUpperCase() : generateRoomCode();
+    const newCode = code ? code.toUpperCase() : 'STAR';
     updateAndBroadcastState((prev) => ({
       ...prev,
       roomCode: newCode,
@@ -930,6 +930,15 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
+  // Automatically ensure Host network listener is active on mount
+  useEffect(() => {
+    if (isHost && gameState.roomCode) {
+      network.initHost(gameState.roomCode, (peerId) => {
+        console.log('[GAME-CONTEXT] Host network listener ready for room:', gameState.roomCode, 'peerId:', peerId);
+      });
+    }
+  }, [isHost, gameState.roomCode]);
+
   // Network message listener (Jackbox-style sync between Host and Joy-Phones)
   useEffect(() => {
     const unsubscribe = network.onMessage((action) => {
@@ -941,6 +950,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (action.type === 'PEER_CONNECTED' || action.type === 'REQUEST_SYNC') {
           network.broadcastToControllers({ type: 'SYNC_STATE', state: gameState });
         } else if (action.type === 'JOIN_ROOM') {
+          console.log('[GAME-CONTEXT] JOIN_ROOM received on Host for:', action.player.name, action.player.characterId);
           joinPlayer(action.player.name, action.player.characterId);
         } else if (action.type === 'SET_TOTAL_ROUNDS') {
           setTotalRounds(action.rounds);

@@ -42,6 +42,13 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
     }
   }, []);
 
+  // If in 'select' mode and a player connects via mobile Joy-Phone, automatically switch to host lobby view
+  useEffect(() => {
+    if (gameState.players.length > 0 && mode === 'select') {
+      setMode('host');
+    }
+  }, [gameState.players.length, mode]);
+
   // Handle Host TV Setup
   const handleHostStart = () => {
     sounds.playCoin();
