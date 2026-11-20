@@ -17,7 +17,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
   onStartController,
   onStartDemo,
 }) => {
-  const { gameState, createRoom, joinPlayer, setMyPlayerId, setIsHost } = useGame();
+  const { gameState, createRoom, joinPlayer, setMyPlayerId, setIsHost, startGame } = useGame();
   const [mode, setMode] = useState<'select' | 'host' | 'controller'>('select');
 
   // Controller Form State
@@ -242,18 +242,36 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
           </div>
 
           {/* Action Buttons */}
-          <div className="flex gap-4 w-full">
+          <div className="flex flex-col sm:flex-row gap-3 w-full">
             <button
               onClick={() => setMode('select')}
-              className="py-3 px-5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300"
+              className="py-3 px-5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 transition-all shrink-0"
             >
               Volver
             </button>
             <button
               onClick={onStartHost}
-              className="flex-1 py-3.5 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-slate-950 font-extrabold text-sm uppercase tracking-wide hover:brightness-110 active:scale-98 shadow-xl"
+              className="py-3 px-5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-yellow-400/30 text-yellow-300 font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2"
+              title="Abre la proyección 3D mientras los jugadores escanean el QR"
             >
-              ¡Iniciar Partida en Senda Arcoíris!
+              <span>📺</span>
+              <span>Proyectar Tablero 3D</span>
+            </button>
+            <button
+              onClick={() => {
+                if (gameState.players.length === 0) {
+                  joinPlayer('Alex', 'mario', 'Front');
+                  joinPlayer('Sofía', 'luigi', 'Back');
+                  joinPlayer('Mateo', 'peach', 'QA');
+                  joinPlayer('Lucía', 'yoshi', 'UX');
+                }
+                startGame();
+                onStartHost();
+              }}
+              className="flex-1 py-3.5 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-slate-950 font-extrabold text-sm uppercase tracking-wide hover:brightness-110 active:scale-98 shadow-xl flex items-center justify-center gap-2"
+            >
+              <span>▶</span>
+              <span>¡Iniciar Partida! ({gameState.players.length} Jugadores)</span>
             </button>
           </div>
         </div>

@@ -37,74 +37,81 @@ export const TopScoreboard: React.FC<TopScoreboardProps> = ({
         </div>
       </div>
 
-      {/* 2. Center 6 Players Cards */}
+      {/* 2. Center Players Cards or Waiting Indicator */}
       <div className="flex-1 flex items-center justify-center gap-2 overflow-x-auto py-1 scrollbar-none">
-        {players.map((player, idx) => {
-          const char = CHARACTERS[player.characterId];
-          const isActive = idx === activePlayerIndex;
-          const isLeader = player.id === starLeaderId && player.stars > 0;
+        {players.length === 0 ? (
+          <div className="px-4 py-1.5 rounded-2xl bg-slate-900/80 border border-dashed border-yellow-400/30 text-yellow-300 font-bold text-xs flex items-center gap-2 animate-pulse">
+            <span>📱</span>
+            <span>Esperando a que los jugadores se unan con el móvil • Sala: <strong className="font-mono text-white tracking-widest">{gameState.roomCode}</strong></span>
+          </div>
+        ) : (
+          players.map((player, idx) => {
+            const char = CHARACTERS[player.characterId] || CHARACTERS.mario;
+            const isActive = phase !== 'lobby' && idx === activePlayerIndex;
+            const isLeader = player.id === starLeaderId && player.stars > 0;
 
-          return (
-            <div
-              key={player.id}
-              className={`relative px-2.5 py-1.5 rounded-2xl transition-all duration-300 flex items-center gap-2 min-w-[125px] max-w-[155px] ${
-                isActive
-                  ? 'bg-slate-900/95 ring-2 ring-yellow-400 shadow-lg shadow-yellow-500/25 scale-105 z-10'
-                  : 'bg-slate-900/60 border border-white/10 opacity-80 hover:opacity-100'
-              }`}
-            >
-              {/* Leader Crown Badge */}
-              {isLeader && (
-                <div className="absolute -top-2.5 -right-1 text-xs animate-bounce" title="Líder de Estrellas">
-                  👑
+            return (
+              <div
+                key={player.id}
+                className={`relative px-2.5 py-1.5 rounded-2xl transition-all duration-300 flex items-center gap-2 min-w-[125px] max-w-[155px] ${
+                  isActive
+                    ? 'bg-slate-900/95 ring-2 ring-yellow-400 shadow-lg shadow-yellow-500/25 scale-105 z-10'
+                    : 'bg-slate-900/60 border border-white/10 opacity-80 hover:opacity-100'
+                }`}
+              >
+                {/* Leader Crown Badge */}
+                {isLeader && (
+                  <div className="absolute -top-2.5 -right-1 text-xs animate-bounce" title="Líder de Estrellas">
+                    👑
+                  </div>
+                )}
+
+                {/* Character Avatar */}
+                <div className="relative shrink-0">
+                  <CharacterAvatar characterId={player.characterId} size="sm" showBorder={false} />
+                  <div
+                    className="absolute -inset-0.5 rounded-xl border"
+                    style={{ borderColor: char.neonColor }}
+                  />
                 </div>
-              )}
 
-              {/* Character Avatar */}
-              <div className="relative shrink-0">
-                <CharacterAvatar characterId={player.characterId} size="sm" showBorder={false} />
-                <div
-                  className="absolute -inset-0.5 rounded-xl border"
-                  style={{ borderColor: char.neonColor }}
-                />
-              </div>
-
-              {/* Player Name and Stars */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1">
-                  <span className="text-[11px] font-extrabold text-white truncate">
-                    {player.name}
-                  </span>
-                  {player.role && (
-                    <span className="text-[9px] text-slate-400 font-semibold truncate">
-                      ({player.role})
+                {/* Player Name and Stars */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1">
+                    <span className="text-[11px] font-extrabold text-white truncate">
+                      {player.name}
                     </span>
-                  )}
-                </div>
+                    {player.role && (
+                      <span className="text-[9px] text-slate-400 font-semibold truncate">
+                        ({player.role})
+                      </span>
+                    )}
+                  </div>
 
-                <div className="flex items-center justify-between text-[11px] text-yellow-300 font-black mt-0.5">
-                  <span className="flex items-center gap-0.5">
-                    ★ {player.stars}
-                  </span>
+                  <div className="flex items-center justify-between text-[11px] text-yellow-300 font-black mt-0.5">
+                    <span className="flex items-center gap-0.5">
+                      ★ {player.stars}
+                    </span>
 
-                  {/* 3 Medals Unlocked: 🟢 🟡 🔴 */}
-                  <div className="flex items-center gap-0.5 text-[9px]" title="Medallas: Seguir, Mejorar, Dejar">
-                    <span className={player.medals.seguir ? 'opacity-100 scale-110' : 'opacity-20 grayscale'}>🟢</span>
-                    <span className={player.medals.mejorar ? 'opacity-100 scale-110' : 'opacity-20 grayscale'}>🟡</span>
-                    <span className={player.medals.dejar ? 'opacity-100 scale-110' : 'opacity-20 grayscale'}>🔴</span>
+                    {/* 3 Medals Unlocked: 🟢 🟡 🔴 */}
+                    <div className="flex items-center gap-0.5 text-[9px]" title="Medallas: Seguir, Mejorar, Dejar">
+                      <span className={player.medals.seguir ? 'opacity-100 scale-110' : 'opacity-20 grayscale'}>🟢</span>
+                      <span className={player.medals.mejorar ? 'opacity-100 scale-110' : 'opacity-20 grayscale'}>🟡</span>
+                      <span className={player.medals.dejar ? 'opacity-100 scale-110' : 'opacity-20 grayscale'}>🔴</span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Active Turn Pill */}
-              {isActive && (
-                <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 px-1.5 py-0.2 rounded-full bg-yellow-400 text-slate-950 text-[8px] font-black tracking-wider uppercase shadow-md animate-pulse">
-                  TURNO
-                </div>
-              )}
-            </div>
-          );
-        })}
+                {/* Active Turn Pill */}
+                {isActive && (
+                  <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 px-1.5 py-0.2 rounded-full bg-yellow-400 text-slate-950 text-[8px] font-black tracking-wider uppercase shadow-md animate-pulse">
+                    TURNO
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* 3. Right Control Buttons: Minijuego & Normas */}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useGame } from '@/context/GameContext';
 import { CHARACTERS } from '@/constants/characters';
 import { POWER_UPS } from '@/constants/powerUps';
@@ -7,149 +7,181 @@ import { BlockSmashMinigame } from '@/components/Minigames/BlockSmashMinigame';
 import { QuickVoteMinigame } from '@/components/Minigames/QuickVoteMinigame';
 import { TargetRouletteModal } from '@/components/Common/TargetRouletteModal';
 import { ChaosEventModal } from '@/components/Common/ChaosEventModal';
-import { sounds } from '@/audio/soundEffects';
 
 export const ControllerScreen: React.FC = () => {
   const { gameState, myPlayerId, rollDice, usePowerUp } = useGame();
 
   const me = gameState.players.find((p) => p.id === myPlayerId);
+  const isGameStarted = gameState.phase !== 'lobby';
   const activePlayer = gameState.players[gameState.activePlayerIndex];
-  const isMyTurn = activePlayer?.id === myPlayerId;
+  const isMyTurn = isGameStarted && activePlayer?.id === myPlayerId;
   const isRolling = gameState.phase === 'rolling' || gameState.phase === 'moving';
 
   if (!me) {
     return (
-      <div className="w-full h-full bg-slate-950 flex flex-col items-center justify-center p-6 text-center text-white">
-        <span className="text-4xl animate-bounce mb-3">🎮</span>
-        <h2 className="text-lg font-bold">Conectando Joy-Phone...</h2>
-        <p className="text-xs text-slate-400 mt-1">Sala: {gameState.roomCode}</p>
+      <div className="w-full h-[100dvh] bg-slate-950 flex flex-col items-center justify-center p-6 text-center text-white font-game select-none">
+        <span className="text-5xl animate-bounce mb-3">🎮</span>
+        <h2 className="text-xl font-black text-yellow-300">Conectando Joy-Phone...</h2>
+        <p className="text-xs text-slate-400 mt-1">Sala: <span className="font-mono text-cyan-300 font-bold">{gameState.roomCode}</span></p>
+        <div className="mt-4 text-[11px] text-slate-500 max-w-xs">
+          Si la pantalla no carga, vuelve a unirte introduciendo tu nombre y personaje en el Lobby.
+        </div>
       </div>
     );
   }
 
-  const char = CHARACTERS[me.characterId];
+  const char = CHARACTERS[me.characterId] || CHARACTERS.mario;
   const receivedCardsCount = gameState.retroCards.filter((c) => c.recipientId === me.id).length;
 
   const handleRoll = () => {
-    if (!isMyTurn || isRolling) return;
+    if (!isGameStarted || !isMyTurn || isRolling) return;
     if (navigator.vibrate) navigator.vibrate(60);
     rollDice(me.id);
   };
 
   return (
-    <div className="w-full h-full bg-slate-950 text-white flex flex-col select-none overflow-y-auto overflow-x-hidden font-game">
-      {/* 1. Header (Matching Reference Screen) */}
+    <div className="w-full h-[100dvh] max-h-[100dvh] bg-slate-950 text-white flex flex-col justify-between overflow-hidden p-2.5 sm:p-3 select-none font-game">
+      {/* 1. COMPACT TOP HUD: Player Info & Medals */}
       <div
-        className="p-3 border-b border-white/10 flex items-center justify-between shrink-0"
-        style={{ backgroundColor: `${char.color}22` }}
+        className="px-3 py-2 rounded-2xl border border-white/10 flex items-center justify-between shadow-lg shrink-0"
+        style={{
+          background: `linear-gradient(135deg, ${char.color}25 0%, rgba(15, 23, 42, 0.95) 100%)`,
+          boxShadow: `0 4px 20px ${char.neonColor}18`,
+        }}
       >
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 min-w-0">
           <CharacterAvatar characterId={me.characterId} size="md" />
-          <div>
-            <div className="text-sm font-black text-white flex items-center gap-1.5">
-              <span>{me.name}</span>
+          <div className="min-w-0">
+            <div className="text-sm font-black text-white flex items-center gap-1.5 truncate">
+              <span className="truncate">{me.name}</span>
               {me.role && (
-                <span className="text-[10px] text-slate-400 font-bold">({me.role})</span>
+                <span className="text-[10px] text-slate-400 font-bold shrink-0">({me.role})</span>
               )}
-              {gameState.starLeaderId === me.id && <span>👑</span>}
+              {gameState.starLeaderId === me.id && <span className="shrink-0">👑</span>}
             </div>
-            <div className="text-[10px] text-yellow-300 font-bold flex items-center gap-1">
-              <span>★ {me.stars} estrellas</span>
+            <div className="text-[10px] text-yellow-300 font-bold flex items-center gap-1 mt-0.5">
+              <span>★ {me.stars}</span>
               <span className="text-slate-500">•</span>
               <span className="text-slate-300">{receivedCardsCount} recibidos</span>
+              <span className="text-slate-500">•</span>
+              <span className="text-cyan-300 font-mono font-bold">Sala {gameState.roomCode}</span>
             </div>
           </div>
         </div>
 
-        {/* 3 Medals Unlocked: 🟢 🟡 🔴 */}
-        <div className="flex items-center gap-1 text-sm bg-slate-950/80 px-2 py-1 rounded-xl border border-white/10">
-          <span className={me.medals.seguir ? 'opacity-100 scale-110' : 'opacity-20 grayscale'}>🟢</span>
-          <span className={me.medals.mejorar ? 'opacity-100 scale-110' : 'opacity-20 grayscale'}>🟡</span>
-          <span className={me.medals.dejar ? 'opacity-100 scale-110' : 'opacity-20 grayscale'}>🔴</span>
+        {/* 3 Retro Medals: 🟢 Seguir, 🟡 Mejorar, 🔴 Dejar */}
+        <div className="flex items-center gap-1 bg-slate-950/80 px-2 py-1 rounded-xl border border-white/10 shrink-0">
+          <span className={`text-sm ${me.medals.seguir ? 'opacity-100 scale-110 drop-shadow' : 'opacity-20 grayscale'}`} title="Medalla Seguir">🟢</span>
+          <span className={`text-sm ${me.medals.mejorar ? 'opacity-100 scale-110 drop-shadow' : 'opacity-20 grayscale'}`} title="Medalla Mejorar">🟡</span>
+          <span className={`text-sm ${me.medals.dejar ? 'opacity-100 scale-110 drop-shadow' : 'opacity-20 grayscale'}`} title="Medalla Dejar">🔴</span>
         </div>
       </div>
 
-      {/* 2. Middle Body: Turn Status + Giant Roll Button */}
-      <div className="flex-1 flex flex-col items-center justify-center p-4">
-        {/* Turn Status Banner */}
-        <div className="mb-3 text-center">
-          {isMyTurn ? (
-            <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-yellow-400 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg animate-pulse">
+      {/* 2. CENTER STAGE: Game State Banner + Tactile Dice Action Button */}
+      <div className="flex-1 flex flex-col items-center justify-center py-2 px-1 min-h-0">
+        {/* Dynamic Context Status Banner */}
+        <div className="mb-3 text-center w-full max-w-xs">
+          {!isGameStarted ? (
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900 border border-yellow-400/30 text-yellow-300 font-bold text-xs uppercase tracking-wider shadow-md animate-pulse">
+              <span>⏳</span>
+              <span>SALA DE ESPERA • ESPERANDO AL HOST</span>
+            </div>
+          ) : isMyTurn ? (
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-300 text-slate-950 font-black text-xs uppercase tracking-wider shadow-xl animate-bounce">
               <span>⚡</span>
-              <span>¡TU TURNO EN LA SENDA!</span>
+              <span>¡TU TURNO! (CASILLA {me.spaceIndex}/20)</span>
             </div>
           ) : (
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900 border border-white/10 text-slate-400 font-bold text-[10px] uppercase tracking-wider">
               <span>⏳</span>
-              <span>Turno de {activePlayer?.name || 'Compañero'}</span>
+              <span>Turno de {activePlayer?.name || 'Compañero'} (R{gameState.round}/{gameState.totalRounds})</span>
             </div>
           )}
         </div>
 
-        {/* Big Tactile Roll Button (Matching Reference) */}
+        {/* Tactile Big Die Button (Responsive, Compact, Never Overflows) */}
         <button
           onClick={handleRoll}
-          disabled={!isMyTurn || isRolling}
-          className={`relative w-40 h-40 md:w-44 md:h-44 rounded-3xl transition-all duration-150 flex flex-col items-center justify-center select-none active:scale-95 cursor-pointer ${
+          disabled={!isGameStarted || !isMyTurn || isRolling}
+          className={`relative w-32 h-32 sm:w-36 sm:h-36 rounded-3xl transition-all duration-150 flex flex-col items-center justify-center select-none active:scale-95 cursor-pointer shadow-2xl ${
             isMyTurn && !isRolling
-              ? 'bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-300 border-4 border-amber-900 text-amber-950 shadow-2xl hover:scale-102 ring-4 ring-yellow-400/50'
-              : 'bg-slate-800 border-4 border-slate-700 opacity-50 cursor-not-allowed shadow-none text-slate-400'
+              ? 'bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-300 border-4 border-amber-900 text-amber-950 hover:scale-103 ring-4 ring-yellow-400/50'
+              : !isGameStarted
+              ? 'bg-slate-900/90 border-2 border-dashed border-white/20 text-slate-500 cursor-not-allowed opacity-60'
+              : 'bg-slate-800/80 border-4 border-slate-700 opacity-50 cursor-not-allowed text-slate-400'
           }`}
           style={
             isMyTurn && !isRolling
               ? {
-                  boxShadow: '0 14px 30px rgba(245, 158, 11, 0.45), inset 0 -8px 0 #78350F',
+                  boxShadow: '0 12px 30px rgba(245, 158, 11, 0.45), inset 0 -6px 0 #78350F',
                 }
               : {}
           }
         >
-          <span className="text-5xl md:text-6xl mb-1 filter drop-shadow">
-            🎲
+          <span className="text-5xl sm:text-6xl mb-1 filter drop-shadow">
+            {!isGameStarted ? '⏳' : '🎲'}
           </span>
-          <span className="text-xs md:text-sm font-black uppercase tracking-wider">
-            {isRolling ? 'TIRANDO...' : 'TIRAR DADO'}
+          <span className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-center px-2 leading-tight">
+            {!isGameStarted
+              ? 'ESPERANDO INICIO...'
+              : isRolling
+              ? 'TIRANDO...'
+              : isMyTurn
+              ? '¡TIRAR DADO!'
+              : `TURNO DE ${activePlayer?.name?.toUpperCase() || 'RIVAL'}`}
           </span>
         </button>
+
+        {!isGameStarted && (
+          <p className="text-[11px] text-slate-400 font-semibold text-center mt-3 max-w-xs">
+            ¡Estás conectado como <span className="text-white font-bold">{me.name}</span>! El anfitrión iniciará la carrera pronto.
+          </p>
+        )}
       </div>
 
-      {/* 3. Bottom Section: Mochila de Power-Ups (Matching Reference) */}
-      <div className="p-3 border-t border-white/10 bg-slate-950/90 shrink-0">
-        <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-          <span className="flex items-center gap-1 text-slate-200">
+      {/* 3. BOTTOM SECTION: Mochila de Power-Ups (Compact & Always in Viewport!) */}
+      <div className="p-2.5 rounded-2xl bg-slate-900/90 border border-white/10 shadow-xl shrink-0 backdrop-blur-md">
+        <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider mb-1.5">
+          <span className="flex items-center gap-1.5 text-slate-200">
             <span>🎒</span>
-            <span>MOCHILA POWER-UPS ({me.powerUps.length}/2)</span>
+            <span className="text-white font-black">MOCHILA POWER-UPS ({me.powerUps.length}/2)</span>
           </span>
-          <span className="text-yellow-400">PASA POR SALIDA = +1 ⭐</span>
+          <span className="text-yellow-400 font-bold">Pasa por Meta = +1 ⭐</span>
         </div>
 
         {me.powerUps.length === 0 ? (
-          <div className="p-2.5 rounded-2xl bg-slate-900 border border-white/10 text-center text-[10px] text-slate-500 italic">
-            Mochila vacía. Cae en una Casilla Caos para conseguir un objeto.
+          <div className="py-2 px-3 rounded-xl bg-slate-950/70 border border-white/5 text-center text-[10px] text-slate-400 flex items-center justify-center gap-2">
+            <span>✨</span>
+            <span>Mochila vacía. Cae en casillas 🟣 Caos para ganar objetos.</span>
           </div>
         ) : (
-          <div className="space-y-1.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
             {me.powerUps.map((pupType, idx) => {
               const pupInfo = POWER_UPS[pupType];
               return (
                 <div
                   key={`${pupType}-${idx}`}
-                  className="p-2 rounded-2xl bg-slate-900 border border-white/15 flex items-center justify-between gap-2 shadow-sm"
+                  className="p-1.5 px-2.5 rounded-xl bg-slate-950/80 border border-white/10 flex items-center justify-between gap-2 shadow-sm"
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-2xl">{pupInfo.icon}</span>
+                    <span className="text-xl shrink-0">{pupInfo.icon}</span>
                     <div className="min-w-0">
-                      <div className="text-xs font-black text-white truncate">{pupInfo.name}</div>
+                      <div className="text-[11px] font-black text-white truncate">{pupInfo.name}</div>
                       <div className="text-[9px] text-slate-400 truncate">{pupInfo.description}</div>
                     </div>
                   </div>
 
                   <button
                     onClick={() => {
-                      // If Boo, pick rival with most stars
                       const others = gameState.players.filter((p) => p.id !== me.id).sort((a, b) => b.stars - a.stars);
                       usePowerUp(me.id, pupType, others[0]?.id);
                     }}
-                    className="px-3 py-1 rounded-xl bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-[10px] uppercase shrink-0 shadow-md active:scale-95 transition-all"
+                    disabled={!isGameStarted || !isMyTurn}
+                    className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase shrink-0 transition-all ${
+                      isGameStarted && isMyTurn
+                        ? 'bg-yellow-400 hover:bg-yellow-300 text-slate-950 shadow-md active:scale-95 cursor-pointer'
+                        : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                    }`}
                   >
                     USAR
                   </button>

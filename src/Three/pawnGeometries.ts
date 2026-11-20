@@ -18,67 +18,86 @@ export function tryLoadGLTFCharacter(charId: CharacterId, onLoaded: (group: THRE
     return;
   }
 
-  const modelUrl = `/models/${charId}.glb`;
-  gltfLoader.load(
-    modelUrl,
-    (gltf) => {
-      const rawScene = gltf.scene;
+  // Support both charId and character aliases (mario->boo, peach->rosalina, bowser->huesitos, toad->shyguy)
+  const candidateUrls: string[] = [
+    `/models/${charId}.glb`,
+    charId === 'mario' ? '/models/boo.glb' : '',
+    charId === 'peach' ? '/models/rosalina.glb' : '',
+    charId === 'bowser' ? '/models/huesitos.glb' : '',
+    charId === 'toad' ? '/models/shyguy.glb' : '',
+  ].filter(Boolean);
 
-      // 1. Enable shadows, material brightness & double-sided rendering for all child meshes
-      rawScene.traverse((child) => {
-        if ((child as THREE.Mesh).isMesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
-          const mesh = child as THREE.Mesh;
-          if (mesh.material) {
-            const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-            mats.forEach((m) => {
-              m.side = THREE.DoubleSide;
-              m.depthWrite = true;
-              // Lift material specular glossiness and prevent dark muddy shading
-              if ('roughness' in m && typeof (m as any).roughness === 'number') {
-                (m as any).roughness = Math.min((m as any).roughness, 0.40);
-              }
-              if ('metalness' in m && typeof (m as any).metalness === 'number') {
-                (m as any).metalness = Math.min((m as any).metalness, 0.25);
-              }
-            });
+  const tryLoadFromIndex = (idx: number) => {
+    if (idx >= candidateUrls.length) return;
+    const modelUrl = candidateUrls[idx];
+
+    gltfLoader.load(
+      modelUrl,
+      (gltf) => {
+        const rawScene = gltf.scene;
+
+        // 1. Enable shadows, material brightness & double-sided rendering for all child meshes
+        rawScene.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+            const mesh = child as THREE.Mesh;
+            if (mesh.material) {
+              const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+              mats.forEach((m) => {
+                m.side = THREE.DoubleSide;
+                m.depthWrite = true;
+                // Lift material specular glossiness and prevent dark muddy shading
+                if ('roughness' in m && typeof (m as any).roughness === 'number') {
+                  (m as any).roughness = Math.min((m as any).roughness, 0.40);
+                }
+                if ('metalness' in m && typeof (m as any).metalness === 'number') {
+                  (m as any).metalness = Math.min((m as any).metalness, 0.25);
+                }
+              });
+            }
           }
+        });
+
+        // 2. Measure actual bounding box after scene hierarchy
+        rawScene.updateMatrixWorld(true);
+        const box = new THREE.Box3().setFromObject(rawScene);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        const center = new THREE.Vector3();
+        box.getCenter(center);
+
+        // Target unscaled height = 1.65 (so when scaled by 0.62 in GameBoard3D, rendered height is ~1.02 units)
+        const targetHeight = 1.65;
+        const modelDimension = Math.max(size.y, size.x * 0.7, size.z * 0.7);
+        const scaleFactor = targetHeight / (modelDimension > 0.0001 ? modelDimension : 1.0);
+
+        // 3. Wrap in a normalized anchor group: centered at (0, 0) and seated on feet at Y=0
+        const container = new THREE.Group();
+        container.name = 'char_body_group';
+
+        rawScene.scale.set(scaleFactor, scaleFactor, scaleFactor);
+        rawScene.position.x = -center.x * scaleFactor;
+        rawScene.position.z = -center.z * scaleFactor;
+        rawScene.position.y = -box.min.y * scaleFactor;
+
+        container.add(rawScene);
+
+        loadedGltfCache.set(charId, container);
+        onLoaded(SkeletonUtils.clone(container) as THREE.Group);
+      },
+      undefined,
+      (err) => {
+        if (idx + 1 < candidateUrls.length) {
+          tryLoadFromIndex(idx + 1);
+        } else {
+          console.warn(`[GLB Loader] Could not load candidate models for ${charId} (using procedural 3D model instead):`, err);
         }
-      });
+      }
+    );
+  };
 
-      // 2. Measure actual bounding box after scene hierarchy
-      rawScene.updateMatrixWorld(true);
-      const box = new THREE.Box3().setFromObject(rawScene);
-      const size = new THREE.Vector3();
-      box.getSize(size);
-      const center = new THREE.Vector3();
-      box.getCenter(center);
-
-      // Target unscaled height = 1.65 (so when scaled by 0.62 in GameBoard3D, rendered height is ~1.02 units)
-      const targetHeight = 1.65;
-      const modelDimension = Math.max(size.y, size.x * 0.7, size.z * 0.7);
-      const scaleFactor = targetHeight / (modelDimension > 0.0001 ? modelDimension : 1.0);
-
-      // 3. Wrap in a normalized anchor group: centered at (0, 0) and seated on feet at Y=0
-      const container = new THREE.Group();
-      container.name = 'char_body_group';
-
-      rawScene.scale.set(scaleFactor, scaleFactor, scaleFactor);
-      rawScene.position.x = -center.x * scaleFactor;
-      rawScene.position.z = -center.z * scaleFactor;
-      rawScene.position.y = -box.min.y * scaleFactor;
-
-      container.add(rawScene);
-
-      loadedGltfCache.set(charId, container);
-      onLoaded(SkeletonUtils.clone(container) as THREE.Group);
-    },
-    undefined,
-    (err) => {
-      console.warn(`[GLB Loader] Could not load /models/${charId}.glb (using procedural 3D model instead):`, err);
-    }
-  );
+  tryLoadFromIndex(0);
 }
 
 /**

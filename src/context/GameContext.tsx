@@ -30,6 +30,7 @@ interface GameContextType {
   // Game Actions
   createRoom: (code?: string) => string;
   joinPlayer: (name: string, characterId: CharacterId, role?: string) => Player;
+  startGame: () => void;
   rollDice: (playerId?: string) => void;
   usePowerUp: (playerId: string, powerUp: PowerUpType, targetPlayerId?: string) => void;
   resolveRoulette: (targetPlayerId: string) => void;
@@ -74,14 +75,13 @@ export const createInitialPlayers = (): Player[] => {
 };
 
 export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const initialPlayers = createInitialPlayers();
-  const [myPlayerId, setMyPlayerId] = useState<string>(initialPlayers[0].id);
+  const [myPlayerId, setMyPlayerId] = useState<string>('');
   const [isHost, setIsHost] = useState<boolean>(true);
 
   const [gameState, setGameState] = useState<GameState>(() => ({
     roomCode: 'STAR',
-    phase: 'turn_start',
-    players: initialPlayers,
+    phase: 'lobby',
+    players: [],
     activePlayerIndex: 0,
     diceRoll: [1],
     currentTurn: 1,
@@ -96,7 +96,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     targetRoulette: null,
     chaosEvent: null,
     bonusStarWheel: null,
-    activeMessage: '¡Arranca Sprint Party en la Senda Arcoíris! Turno de Alex (Front).',
+    activeMessage: 'Esperando a que los jugadores se unan con su móvil...',
     starLeaderId: undefined,
     bonusStarsAwarded: false,
   }));
@@ -126,19 +126,39 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   }, []);
 
-  // 1. Create Room
+  // 1. Create Room (Fresh empty room waiting for mobile players)
   const createRoom = useCallback((code?: string): string => {
     const newCode = code ? code.toUpperCase() : generateRoomCode();
     updateAndBroadcastState((prev) => ({
       ...prev,
       roomCode: newCode,
-      phase: 'turn_start',
+      phase: 'lobby',
+      players: [],
       currentTurn: 1,
       round: 1,
+      activePlayerIndex: 0,
       retroCards: [],
       traps: [],
+      activeMessage: 'Esperando a que los jugadores se unan con su móvil...',
     }));
     return newCode;
+  }, [updateAndBroadcastState]);
+
+  // 1B. Start Game (Host activates the board; turn begins!)
+  const startGame = useCallback(() => {
+    sounds.playStarFanfare();
+    updateAndBroadcastState((prev) => {
+      if (prev.players.length === 0) return prev;
+      const firstPlayer = prev.players[0];
+      return {
+        ...prev,
+        phase: 'turn_start',
+        activePlayerIndex: 0,
+        currentTurn: 1,
+        round: 1,
+        activeMessage: `¡Arranca Sprint Party! Turno de ${firstPlayer.name} (${CHARACTERS[firstPlayer.characterId]?.name || ''}).`,
+      };
+    });
   }, [updateAndBroadcastState]);
 
   // 2. Join Player
@@ -864,6 +884,35 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
+  // Network message listener (Jackbox-style sync between Host and Joy-Phones)
+  useEffect(() => {
+    const unsubscribe = network.onMessage((action) => {
+      if (action.type === 'SYNC_STATE') {
+        if (!isHost) {
+          setGameState(action.state);
+        }
+      } else if (isHost) {
+        if (action.type === 'JOIN_ROOM') {
+          joinPlayer(action.player.name, action.player.characterId);
+        } else if (action.type === 'ROLL_DICE') {
+          rollDice(action.playerId);
+        } else if (action.type === 'USE_POWERUP') {
+          usePowerUp(action.playerId, action.powerUp, action.targetPlayerId);
+        } else if (action.type === 'SUBMIT_RETRO_CARD') {
+          submitRetroCard(action.card);
+        } else if (action.type === 'SUBMIT_MINIGAME_TAP') {
+          submitMinigameTap(action.playerId);
+        } else if (action.type === 'SUBMIT_MINIGAME_VOTE') {
+          submitMinigameVote(action.voterId, action.targetId);
+        }
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [isHost, joinPlayer, rollDice, usePowerUp, submitRetroCard, submitMinigameTap, submitMinigameVote]);
+
   return (
     <GameContext.Provider
       value={{
@@ -874,6 +923,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsHost,
         createRoom,
         joinPlayer,
+        startGame,
         rollDice,
         usePowerUp,
         resolveRoulette,

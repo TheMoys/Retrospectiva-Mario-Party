@@ -21,12 +21,12 @@ interface GameBoard3DProps {
 
 // 6 Authentic Mario Kart Rainbow Road Neon Lanes
 const RAINBOW_LANES = [
-  { id: 'red', color: 0xff0044, emissive: 0xff0033, name: 'Mario Red' },
-  { id: 'orange', color: 0xff6600, emissive: 0xff5500, name: 'Bowser Orange' },
-  { id: 'yellow', color: 0xffea00, emissive: 0xffcc00, name: 'Toad Yellow' },
-  { id: 'green', color: 0x00ff66, emissive: 0x00dd44, name: 'Luigi Green' },
-  { id: 'cyan', color: 0x00d4ff, emissive: 0x00aaff, name: 'Yoshi Cyan' },
-  { id: 'purple', color: 0xaa00ff, emissive: 0x8800ff, name: 'Peach Violet' },
+  { id: 'red', color: 0xff0044, emissive: 0xff0033, name: 'Boo Lane' },
+  { id: 'orange', color: 0xff6600, emissive: 0xff5500, name: 'Huesitos Lane' },
+  { id: 'yellow', color: 0xffea00, emissive: 0xffcc00, name: 'ShyGuy Lane' },
+  { id: 'green', color: 0x00ff66, emissive: 0x00dd44, name: 'Luigi Lane' },
+  { id: 'cyan', color: 0x00d4ff, emissive: 0x00aaff, name: 'Yoshi Lane' },
+  { id: 'purple', color: 0xaa00ff, emissive: 0x8800ff, name: 'Rosalina Lane' },
 ];
 
 export const GameBoard3D: React.FC<GameBoard3DProps> = ({ gameState }) => {

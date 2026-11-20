@@ -9,7 +9,7 @@ import { sounds } from '@/audio/soundEffects';
 type ViewMode = 'lobby' | 'host' | 'controller' | 'demo';
 
 const GameMain: React.FC = () => {
-  const { gameState, joinPlayer, setMyPlayerId } = useGame();
+  const { gameState, joinPlayer, setMyPlayerId, startGame } = useGame();
   const [view, setView] = useState<ViewMode>(() => {
     // If URL contains mode=controller, default to controller view
     if (typeof window !== 'undefined') {
@@ -21,7 +21,7 @@ const GameMain: React.FC = () => {
 
   const [isMuted, setIsMuted] = useState(false);
 
-  // Handle Demo Launch (Pre-fill 4 team players if needed)
+  // Handle Demo Launch (Pre-fill 4 team players & start game directly)
   const handleStartDemo = () => {
     sounds.playStarFanfare();
 
@@ -34,6 +34,7 @@ const GameMain: React.FC = () => {
       setMyPlayerId(p1.id);
     }
 
+    startGame();
     setView('demo');
   };
 

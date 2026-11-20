@@ -3,32 +3,32 @@ import { Character, CharacterId } from '@/types/game';
 export const CHARACTERS: Record<CharacterId, Character> = {
   mario: {
     id: 'mario',
-    name: 'Mario',
-    color: '#E52521',
-    secondaryColor: '#002688',
-    neonColor: '#ff0033',
-    laneIndex: 0, // Rojo neón
-    avatar: '🔴',
+    name: 'Boo',
+    color: '#F8FAFC',
+    secondaryColor: '#818CF8',
+    neonColor: '#38BDF8',
+    laneIndex: 0, // Carril Cian Fantasmal
+    avatar: '👻',
     soundName: 'mario',
   },
   bowser: {
     id: 'bowser',
-    name: 'Bowser',
-    color: '#FF6600',
-    secondaryColor: '#2C7A2C',
-    neonColor: '#ff6600',
-    laneIndex: 1, // Naranja neón
-    avatar: '🔥',
+    name: 'Huesitos',
+    color: '#CBD5E1',
+    secondaryColor: '#0D9488',
+    neonColor: '#2DD4BF',
+    laneIndex: 1, // Carril Turquesa Hueso
+    avatar: '🦴',
     soundName: 'bowser',
   },
   toad: {
     id: 'toad',
-    name: 'Toad',
-    color: '#FFEE00',
-    secondaryColor: '#0033AA',
-    neonColor: '#ffee00',
-    laneIndex: 2, // Amarillo neón
-    avatar: '🍄',
+    name: 'ShyGuy',
+    color: '#E11D48',
+    secondaryColor: '#FFFFFF',
+    neonColor: '#FB7185',
+    laneIndex: 2, // Carril Rubí Máscara
+    avatar: '🎭',
     soundName: 'toad',
   },
   luigi: {
@@ -53,12 +53,12 @@ export const CHARACTERS: Record<CharacterId, Character> = {
   },
   peach: {
     id: 'peach',
-    name: 'Peach',
-    color: '#E056FD',
-    secondaryColor: '#FFD700',
-    neonColor: '#9900ff',
-    laneIndex: 5, // Violeta neón
-    avatar: '👑',
+    name: 'Rosalina',
+    color: '#06B6D4',
+    secondaryColor: '#FDE047',
+    neonColor: '#00F0FF',
+    laneIndex: 5, // Azul Estelar / Celeste Neón
+    avatar: '✨',
     soundName: 'peach',
   },
 };
@@ -66,10 +66,10 @@ export const CHARACTERS: Record<CharacterId, Character> = {
 export const CHARACTER_LIST: Character[] = Object.values(CHARACTERS);
 
 export const DEFAULT_TEAM_MEMBERS = [
-  { name: 'Alex', role: 'Front', characterId: 'mario' as CharacterId },
-  { name: 'Sofía', role: 'Back', characterId: 'luigi' as CharacterId },
-  { name: 'Mateo', role: 'QA', characterId: 'peach' as CharacterId },
-  { name: 'Lucía', role: 'UX', characterId: 'yoshi' as CharacterId },
-  { name: 'Carlos', role: 'DevOps', characterId: 'bowser' as CharacterId },
-  { name: 'Elena', role: 'PO', characterId: 'toad' as CharacterId },
+  { name: 'Alex', role: 'Front', characterId: 'mario' as CharacterId }, // Boo
+  { name: 'Sofía', role: 'Back', characterId: 'luigi' as CharacterId }, // Luigi
+  { name: 'Mateo', role: 'QA', characterId: 'peach' as CharacterId }, // Rosalina
+  { name: 'Lucía', role: 'UX', characterId: 'yoshi' as CharacterId }, // Yoshi
+  { name: 'Carlos', role: 'DevOps', characterId: 'bowser' as CharacterId }, // Huesitos
+  { name: 'Elena', role: 'PO', characterId: 'toad' as CharacterId }, // ShyGuy
 ];
