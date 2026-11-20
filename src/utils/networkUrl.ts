@@ -6,6 +6,9 @@
 // Host machine LAN IP detected on local network
 export const DEFAULT_LAN_IP = '172.22.101.100';
 
+// Default active Cloudflare Tunnel URL for multi-network / university / mobile data
+export const DEFAULT_TUNNEL_URL = 'https://innovations-atomic-ringtones-alliance.trycloudflare.com';
+
 export function getMobileJoinUrl(roomCode: string, customBaseUrl?: string): string {
   if (typeof window === 'undefined') return '';
 

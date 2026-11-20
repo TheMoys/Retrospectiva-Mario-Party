@@ -5,7 +5,7 @@ import { CharacterId } from '@/types/game';
 import { network } from '@/services/network';
 import { sounds } from '@/audio/soundEffects';
 import { CharacterAvatar } from '@/components/Common/CharacterAvatar';
-import { getMobileJoinUrl, getQrCodeImageUrl } from '@/utils/networkUrl';
+import { getMobileJoinUrl, getQrCodeImageUrl, DEFAULT_TUNNEL_URL } from '@/utils/networkUrl';
 import { RoundSelector } from '@/components/Host/RoundSelector';
 
 interface LobbyScreenProps {
@@ -94,9 +94,10 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
     );
   };
 
-  // Discover active Cloudflare tunnel for mobile data (4G/5G) connections
-  const [tunnelUrl, setTunnelUrl] = useState<string | null>(null);
+  // Multi-network / University Wi-Fi / Mobile Data Tunnel state
+  const [tunnelUrl, setTunnelUrl] = useState<string>(DEFAULT_TUNNEL_URL);
   const [networkMode, setNetworkMode] = useState<'tunnel' | 'wifi'>('tunnel');
+  const [copied, setCopied] = useState<boolean>(false);
 
   useEffect(() => {
     fetch('/api/tunnel')
@@ -104,15 +105,19 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
       .then((data) => {
         if (data.active && data.url) {
           setTunnelUrl(data.url);
-          setNetworkMode('tunnel');
-        } else {
-          setNetworkMode('wifi');
         }
       })
-      .catch(() => {
-        setNetworkMode('wifi');
-      });
+      .catch(() => {});
   }, []);
+
+  const handleCopyUrl = () => {
+    if (navigator.clipboard && mobileJoinUrl) {
+      navigator.clipboard.writeText(mobileJoinUrl);
+      setCopied(true);
+      sounds.playCoin();
+      setTimeout(() => setCopied(false), 2500);
+    }
+  };
 
   // QR Code URL pointing to player controller with auto-filled room code
   const activeBaseUrl = networkMode === 'tunnel' && tunnelUrl ? tunnelUrl : undefined;
@@ -223,57 +228,81 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                   Código de la Sala
                 </div>
 
-                {/* Network Mode Switcher */}
-                {tunnelUrl && (
-                  <div className="flex items-center bg-slate-950/80 p-0.5 rounded-xl border border-white/10 text-[10px]">
-                    <button
-                      type="button"
-                      onClick={() => setNetworkMode('tunnel')}
-                      className={`px-2 py-1 rounded-lg font-bold transition-all flex items-center gap-1 ${
-                        networkMode === 'tunnel'
-                          ? 'bg-blue-600 text-white shadow'
-                          : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      <span>🌐</span>
-                      <span>Datos Móviles (4G/5G)</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNetworkMode('wifi')}
-                      className={`px-2 py-1 rounded-lg font-bold transition-all flex items-center gap-1 ${
-                        networkMode === 'wifi'
-                          ? 'bg-amber-600 text-white shadow'
-                          : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      <span>📶</span>
-                      <span>Misma Wi-Fi</span>
-                    </button>
-                  </div>
-                )}
+                {/* Network Mode Switcher (Always available for university/multi-network/4G) */}
+                <div className="flex items-center bg-slate-950/90 p-1 rounded-xl border border-white/15 text-[11px] shadow-md">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      sounds.playCoin();
+                      setNetworkMode('tunnel');
+                    }}
+                    className={`px-3 py-1.5 rounded-lg font-extrabold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      networkMode === 'tunnel'
+                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25 ring-1 ring-blue-400/40'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <span>🌐</span>
+                    <span>Cualquier Red (Wi-Fi Univ. / 4G / 5G)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      sounds.playCoin();
+                      setNetworkMode('wifi');
+                    }}
+                    className={`px-3 py-1.5 rounded-lg font-extrabold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      networkMode === 'wifi'
+                        ? 'bg-amber-600 text-white shadow-lg shadow-amber-500/25 ring-1 ring-amber-400/40'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <span>📶</span>
+                    <span>Misma Wi-Fi</span>
+                  </button>
+                </div>
               </div>
 
               <div className="text-5xl md:text-6xl font-extrabold text-yellow-300 font-pixel tracking-widest my-2 text-stroke-sm">
                 {gameState.roomCode}
               </div>
               <p className="text-xs text-slate-300">
-                O entra en el navegador móvil e ingresa este código de 4 letras.
+                Escanea el código QR con la cámara del móvil o abre este enlace en el navegador móvil:
               </p>
-              <div className="mt-3 text-[11px] text-cyan-300 break-all bg-slate-950/70 p-2 rounded-xl border border-white/10 font-mono">
-                {mobileJoinUrl}
+
+              {/* Copyable URL Bar */}
+              <div className="mt-3 flex items-center gap-2">
+                <div
+                  onClick={handleCopyUrl}
+                  title="Haz clic para copiar"
+                  className="flex-1 text-xs text-cyan-300 break-all bg-slate-950/90 p-2.5 rounded-xl border border-cyan-500/30 font-mono hover:border-cyan-400 cursor-pointer transition-all flex items-center justify-between select-all group shadow-inner"
+                >
+                  <span className="truncate">{mobileJoinUrl}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCopyUrl}
+                  className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-md ${
+                    copied
+                      ? 'bg-emerald-600 text-white ring-2 ring-emerald-400'
+                      : 'bg-slate-800 hover:bg-slate-700 text-white border border-white/20 hover:scale-105 active:scale-95'
+                  }`}
+                >
+                  <span>{copied ? '✓' : '📋'}</span>
+                  <span>{copied ? '¡Copiado!' : 'Copiar Enlace'}</span>
+                </button>
               </div>
 
               {/* Network Requirement Explanatory Badge */}
               {networkMode === 'tunnel' ? (
-                <div className="mt-2 text-[11px] text-blue-300 font-semibold flex items-center gap-1.5 bg-blue-500/15 border border-blue-400/30 px-3 py-1.5 rounded-xl">
-                  <span>🌐</span>
-                  <span>Modo Internet Activo: Puedes escanear y jugar con <strong>datos móviles (4G/5G)</strong> sin necesidad de Wi-Fi.</span>
+                <div className="mt-2.5 text-[11px] text-blue-200 font-semibold flex items-center gap-2 bg-blue-500/15 border border-blue-400/30 px-3 py-2 rounded-xl">
+                  <span className="text-base shrink-0">🌐</span>
+                  <span><strong>Modo Multired / Universidad Activo:</strong> Funciona con <strong>cualquier red Wi-Fi</strong> (Wi-Fi alumnos, invitados, etc.) o con <strong>datos móviles (4G/5G)</strong>.</span>
                 </div>
               ) : (
-                <div className="mt-2 text-[11px] text-amber-300 font-semibold flex items-center gap-1.5 bg-amber-500/15 border border-amber-400/30 px-3 py-1.5 rounded-xl">
-                  <span>⚠️</span>
-                  <span>Misma Wi-Fi requerida: Tu teléfono debe estar conectado a la <strong>misma red Wi-Fi</strong> que este PC.</span>
+                <div className="mt-2.5 text-[11px] text-amber-200 font-semibold flex items-center gap-2 bg-amber-500/15 border border-amber-400/30 px-3 py-2 rounded-xl">
+                  <span className="text-base shrink-0">⚠️</span>
+                  <span><strong>Misma Wi-Fi Requerida:</strong> El móvil debe estar conectado a la <strong>misma red exacta</strong> que este ordenador.</span>
                 </div>
               )}
             </div>

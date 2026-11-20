@@ -14,7 +14,7 @@ import { QuickVoteMinigame } from '@/components/Minigames/QuickVoteMinigame';
 import { MinigameIntroModal } from '@/components/Minigames/MinigameIntroModal';
 import { CinematicDiceOverlay } from '@/components/Common/CinematicDiceOverlay';
 import { RoundSelector } from './RoundSelector';
-import { getMobileJoinUrl, getQrCodeImageUrl } from '@/utils/networkUrl';
+import { getMobileJoinUrl, getQrCodeImageUrl, DEFAULT_TUNNEL_URL } from '@/utils/networkUrl';
 import { network } from '@/services/network';
 import { CharacterId } from '@/types/game';
 
@@ -44,7 +44,7 @@ export const HostScreen: React.FC = () => {
     });
   }, [gameState.roomCode, setIsHost]);
 
-  const [tunnelUrl, setTunnelUrl] = useState<string | null>(null);
+  const [tunnelUrl, setTunnelUrl] = useState<string>(DEFAULT_TUNNEL_URL);
   const [networkMode, setNetworkMode] = useState<'tunnel' | 'wifi'>('tunnel');
 
   useEffect(() => {
@@ -53,14 +53,9 @@ export const HostScreen: React.FC = () => {
       .then((data) => {
         if (data.active && data.url) {
           setTunnelUrl(data.url);
-          setNetworkMode('tunnel');
-        } else {
-          setNetworkMode('wifi');
         }
       })
-      .catch(() => {
-        setNetworkMode('wifi');
-      });
+      .catch(() => {});
   }, []);
 
   const activeBaseUrl = networkMode === 'tunnel' && tunnelUrl ? tunnelUrl : undefined;
@@ -131,43 +126,45 @@ export const HostScreen: React.FC = () => {
               <div className="text-[10px] uppercase font-bold text-slate-400">Escanea con tu móvil</div>
               <div className="text-2xl font-black text-yellow-300 tracking-wider font-pixel my-0.5">{gameState.roomCode}</div>
 
-              {/* Mode switch between Public Tunnel (4G/5G) and Wi-Fi */}
-              {tunnelUrl && (
-                <div className="flex items-center justify-center bg-slate-950/80 p-0.5 rounded-lg border border-white/10 text-[9px] my-1">
-                  <button
-                    type="button"
-                    onClick={() => setNetworkMode('tunnel')}
-                    className={`px-1.5 py-0.5 rounded font-bold transition-all ${
-                      networkMode === 'tunnel' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    🌐 4G/5G
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setNetworkMode('wifi')}
-                    className={`px-1.5 py-0.5 rounded font-bold transition-all ${
-                      networkMode === 'wifi' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    📶 Wi-Fi
-                  </button>
-                </div>
-              )}
+              {/* Mode switch between Public Tunnel (Univ / 4G / 5G) and Local Wi-Fi */}
+              <div className="flex items-center justify-center bg-slate-950/90 p-0.5 rounded-lg border border-white/15 text-[9px] my-1 shadow">
+                <button
+                  type="button"
+                  onClick={() => setNetworkMode('tunnel')}
+                  className={`px-2 py-0.5 rounded font-extrabold transition-all ${
+                    networkMode === 'tunnel' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  🌐 Univ / 4G
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNetworkMode('wifi')}
+                  className={`px-2 py-0.5 rounded font-extrabold transition-all ${
+                    networkMode === 'wifi' ? 'bg-amber-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  📶 Wi-Fi Local
+                </button>
+              </div>
 
               <div className="text-[11px] font-bold text-cyan-300 bg-slate-950/80 px-2.5 py-1 rounded-xl border border-white/10 mt-1">
                 {gameState.players.length}/6 Jugadores
               </div>
 
-              <div className="text-[9px] text-slate-400 mt-1">
-                {networkMode === 'tunnel' ? '🌐 Datos móviles OK' : '📶 Misma Wi-Fi requerida'}
+              <div className="text-[9px] text-slate-300 font-medium mt-1">
+                {networkMode === 'tunnel' ? '🌐 Cualquier Wi-Fi o 4G/5G' : '📶 Misma Wi-Fi requerida'}
               </div>
 
               <button
                 onClick={handleCopyLink}
-                className="mt-1.5 w-full py-1 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-[10px] text-slate-300 border border-white/10 transition-all font-semibold cursor-pointer"
+                className={`mt-1.5 w-full py-1.5 px-2 rounded-lg text-[10px] border border-white/10 transition-all font-bold cursor-pointer shadow ${
+                  copied
+                    ? 'bg-emerald-600 text-white ring-1 ring-emerald-400'
+                    : 'bg-slate-800 hover:bg-slate-700 text-white'
+                }`}
               >
-                {copied ? '✓ Enlace Copiado' : '📋 Copiar Enlace Móvil'}
+                {copied ? '✓ ¡Copiado!' : '📋 Copiar Enlace'}
               </button>
             </div>
           </div>
