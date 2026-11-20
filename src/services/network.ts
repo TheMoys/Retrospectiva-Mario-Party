@@ -139,13 +139,13 @@ class NetworkService {
     }
 
     try {
-      // Use HiveMQ public WebSocket broker over standard WSS
-      const brokerUrl = 'wss://broker.hivemq.com:8884/mqtt';
+      // Use EMQX public high-speed WebSocket broker over standard WSS
+      const brokerUrl = 'wss://broker.emqx.io:8084/mqtt';
       const client = mqtt.connect(brokerUrl, {
         clientId: `${isHost ? 'host' : 'ctrl'}-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
         clean: true,
-        reconnectPeriod: 2500,
-        connectTimeout: 5000,
+        reconnectPeriod: 2000,
+        connectTimeout: 4000,
       });
 
       const hostTopic = `sprint-party-retro-v2/${roomCode}/to-host`;
