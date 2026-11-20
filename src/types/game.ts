@@ -184,7 +184,7 @@ export interface GameState {
 
 // Network message contracts for Jackbox-style real-time sync
 export type NetworkAction =
-  | { type: 'JOIN_ROOM'; player: { name: string; characterId: CharacterId } }
+  | { type: 'JOIN_ROOM'; player: { id?: string; name: string; characterId: CharacterId; role?: string } }
   | { type: 'REQUEST_SYNC' }
   | { type: 'PEER_CONNECTED'; peerId: string }
   | { type: 'SYNC_STATE'; state: GameState }

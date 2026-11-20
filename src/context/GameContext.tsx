@@ -30,7 +30,7 @@ interface GameContextType {
   // Game Actions
   createRoom: (code?: string) => string;
   setTotalRounds: (rounds: number) => void;
-  joinPlayer: (name: string, characterId: CharacterId, role?: string) => Player;
+  joinPlayer: (name: string, characterId: CharacterId, role?: string, existingId?: string) => Player;
   startGame: () => void;
   rollDice: (playerId?: string) => void;
   usePowerUp: (playerId: string, powerUp: PowerUpType, targetPlayerId?: string) => void;
@@ -176,9 +176,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [updateAndBroadcastState]);
 
   // 2. Join Player
-  const joinPlayer = useCallback((name: string, characterId: CharacterId, role?: string): Player => {
+  const joinPlayer = useCallback((name: string, characterId: CharacterId, role?: string, existingId?: string): Player => {
     const newPlayer: Player = {
-      id: `player-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      id: existingId || `player-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       name: name.trim() || CHARACTERS[characterId].name,
       role: role || 'Dev',
       characterId,
@@ -950,8 +950,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (action.type === 'PEER_CONNECTED' || action.type === 'REQUEST_SYNC') {
           network.broadcastToControllers({ type: 'SYNC_STATE', state: gameState });
         } else if (action.type === 'JOIN_ROOM') {
-          console.log('[GAME-CONTEXT] JOIN_ROOM received on Host for:', action.player.name, action.player.characterId);
-          joinPlayer(action.player.name, action.player.characterId);
+          console.log('[GAME-CONTEXT] JOIN_ROOM received on Host for:', action.player.name, action.player.characterId, 'id:', action.player.id);
+          joinPlayer(action.player.name, action.player.characterId, action.player.role, action.player.id);
         } else if (action.type === 'SET_TOTAL_ROUNDS') {
           setTotalRounds(action.rounds);
         } else if (action.type === 'START_MINIGAME_ACTION') {

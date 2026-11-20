@@ -77,37 +77,48 @@ export const JoyPhoneSetup: React.FC<JoyPhoneSetupProps> = ({ initialRoomCode, o
     const targetRoom = (roomCode.trim() || gameState.roomCode || 'STAR').toUpperCase();
     setIsHost(false);
 
+    // Generate deterministic player ID for controller session
+    const playerId = `player-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
     // Initialize controller connection to Host
     network.initController(
       targetRoom,
       () => {
-        // Connected to Host over WebRTC
-        const newPlayer = joinPlayer(trimmedName, selectedChar);
-        setMyPlayerId(newPlayer.id);
+        // Connected to Host over MQTT/SSE/WebRTC
+        setMyPlayerId(playerId);
 
         if (typeof window !== 'undefined' && window.sessionStorage) {
-          window.sessionStorage.setItem('sprint_party_player_id', newPlayer.id);
+          window.sessionStorage.setItem('sprint_party_player_id', playerId);
+          window.sessionStorage.setItem('sprint_party_character_id', selectedChar);
           window.sessionStorage.setItem('sprint_party_room_code', targetRoom);
         }
 
+        joinPlayer(trimmedName, selectedChar, undefined, playerId);
+
         network.sendToHost({
           type: 'JOIN_ROOM',
-          player: { name: trimmedName, characterId: selectedChar },
+          player: { id: playerId, name: trimmedName, characterId: selectedChar },
         });
 
         setIsSubmitting(false);
         if (onJoined) onJoined();
       },
       (err) => {
-        console.warn('Network controller fallback joining local session:', err);
-        // Fallback local join (for multi-tab or local network)
-        const newPlayer = joinPlayer(trimmedName, selectedChar);
-        setMyPlayerId(newPlayer.id);
+        console.warn('Network controller notice:', err);
+        setMyPlayerId(playerId);
 
         if (typeof window !== 'undefined' && window.sessionStorage) {
-          window.sessionStorage.setItem('sprint_party_player_id', newPlayer.id);
+          window.sessionStorage.setItem('sprint_party_player_id', playerId);
+          window.sessionStorage.setItem('sprint_party_character_id', selectedChar);
           window.sessionStorage.setItem('sprint_party_room_code', targetRoom);
         }
+
+        joinPlayer(trimmedName, selectedChar, undefined, playerId);
+
+        network.sendToHost({
+          type: 'JOIN_ROOM',
+          player: { id: playerId, name: trimmedName, characterId: selectedChar },
+        });
 
         setIsSubmitting(false);
         if (onJoined) onJoined();

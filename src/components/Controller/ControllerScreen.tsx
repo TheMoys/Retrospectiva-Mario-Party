@@ -22,7 +22,21 @@ export const ControllerScreen: React.FC = () => {
     }
   }, [myPlayerId, setMyPlayerId]);
 
-  const me = gameState.players.find((p) => p.id === myPlayerId);
+  // Robust player discovery: match by playerId, or fallback to saved characterId
+  const savedCharId = typeof window !== 'undefined' && window.sessionStorage ? window.sessionStorage.getItem('sprint_party_character_id') : null;
+  const me = gameState.players.find((p) => p.id === myPlayerId) ||
+             (savedCharId ? gameState.players.find((p) => p.characterId === savedCharId) : undefined);
+
+  // Keep myPlayerId in sync with the Host if matched via characterId
+  useEffect(() => {
+    if (me && me.id !== myPlayerId) {
+      setMyPlayerId(me.id);
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        window.sessionStorage.setItem('sprint_party_player_id', me.id);
+      }
+    }
+  }, [me, myPlayerId, setMyPlayerId]);
+
   const isGameStarted = gameState.phase !== 'lobby';
   const activePlayer = gameState.players[gameState.activePlayerIndex];
   const isMyTurn = isGameStarted && activePlayer?.id === myPlayerId;
