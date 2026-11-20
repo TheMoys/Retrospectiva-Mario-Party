@@ -36,6 +36,7 @@ class NetworkService {
       this.peer.on('connection', (conn) => {
         conn.on('open', () => {
           this.connections.set(conn.peer, conn);
+          this.handleIncomingData({ type: 'PEER_CONNECTED', peerId: conn.peer }, conn.peer);
         });
 
         conn.on('data', (data) => {
@@ -77,6 +78,7 @@ class NetworkService {
         conn.on('open', () => {
           this.hostConnection = conn;
           onConnected();
+          this.sendToHost({ type: 'REQUEST_SYNC' });
         });
 
         conn.on('data', (data) => {

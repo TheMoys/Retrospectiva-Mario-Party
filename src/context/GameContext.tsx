@@ -861,8 +861,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const resetGame = useCallback(() => {
     updateAndBroadcastState((prev) => ({
       ...prev,
-      phase: 'turn_start',
-      players: createInitialPlayers(),
+      phase: 'lobby',
+      players: [],
       activePlayerIndex: 0,
       currentTurn: 1,
       round: 1,
@@ -873,7 +873,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       targetRoulette: null,
       chaosEvent: null,
       bonusStarWheel: null,
-      activeMessage: '¡Nueva partida iniciada en la Senda Arcoíris!',
+      activeMessage: 'Esperando a que los jugadores se unan con su móvil...',
     }));
   }, [updateAndBroadcastState]);
 
@@ -892,7 +892,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setGameState(action.state);
         }
       } else if (isHost) {
-        if (action.type === 'JOIN_ROOM') {
+        if (action.type === 'PEER_CONNECTED' || action.type === 'REQUEST_SYNC') {
+          network.broadcastToControllers({ type: 'SYNC_STATE', state: gameState });
+        } else if (action.type === 'JOIN_ROOM') {
           joinPlayer(action.player.name, action.player.characterId);
         } else if (action.type === 'ROLL_DICE') {
           rollDice(action.playerId);
@@ -911,7 +913,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => {
       unsubscribe();
     };
-  }, [isHost, joinPlayer, rollDice, usePowerUp, submitRetroCard, submitMinigameTap, submitMinigameVote]);
+  }, [isHost, gameState, joinPlayer, rollDice, usePowerUp, submitRetroCard, submitMinigameTap, submitMinigameVote]);
 
   return (
     <GameContext.Provider

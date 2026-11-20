@@ -31,7 +31,9 @@ export const TopScoreboard: React.FC<TopScoreboardProps> = ({
               SPRINT PARTY • SENDA ARCOÍRIS 3D
             </div>
             <div className="text-[10px] font-bold text-slate-300">
-              Ronda {round}/{totalRounds} • Casilla {players[activePlayerIndex]?.spaceIndex ?? 0}/20
+              {phase === 'lobby'
+                ? `Sala ${gameState.roomCode} • ${players.length}/6 Jugadores Conectados`
+                : `Ronda ${round}/${totalRounds} • Casilla ${players[activePlayerIndex]?.spaceIndex ?? 0}/20`}
             </div>
           </div>
         </div>

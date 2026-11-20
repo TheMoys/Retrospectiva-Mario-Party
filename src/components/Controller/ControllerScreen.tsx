@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useGame } from '@/context/GameContext';
 import { CHARACTERS } from '@/constants/characters';
 import { POWER_UPS } from '@/constants/powerUps';
@@ -7,9 +7,20 @@ import { BlockSmashMinigame } from '@/components/Minigames/BlockSmashMinigame';
 import { QuickVoteMinigame } from '@/components/Minigames/QuickVoteMinigame';
 import { TargetRouletteModal } from '@/components/Common/TargetRouletteModal';
 import { ChaosEventModal } from '@/components/Common/ChaosEventModal';
+import { JoyPhoneSetup } from '@/components/Controller/JoyPhoneSetup';
 
 export const ControllerScreen: React.FC = () => {
-  const { gameState, myPlayerId, rollDice, usePowerUp } = useGame();
+  const { gameState, myPlayerId, setMyPlayerId, rollDice, usePowerUp } = useGame();
+
+  // Attempt to restore existing player session from sessionStorage
+  useEffect(() => {
+    if (!myPlayerId && typeof window !== 'undefined' && window.sessionStorage) {
+      const savedId = window.sessionStorage.getItem('sprint_party_player_id');
+      if (savedId) {
+        setMyPlayerId(savedId);
+      }
+    }
+  }, [myPlayerId, setMyPlayerId]);
 
   const me = gameState.players.find((p) => p.id === myPlayerId);
   const isGameStarted = gameState.phase !== 'lobby';
@@ -17,17 +28,9 @@ export const ControllerScreen: React.FC = () => {
   const isMyTurn = isGameStarted && activePlayer?.id === myPlayerId;
   const isRolling = gameState.phase === 'rolling' || gameState.phase === 'moving';
 
+  // If player has not configured their Joy-Phone profile yet, display Onboarding Form
   if (!me) {
-    return (
-      <div className="w-full h-[100dvh] bg-slate-950 flex flex-col items-center justify-center p-6 text-center text-white font-game select-none">
-        <span className="text-5xl animate-bounce mb-3">🎮</span>
-        <h2 className="text-xl font-black text-yellow-300">Conectando Joy-Phone...</h2>
-        <p className="text-xs text-slate-400 mt-1">Sala: <span className="font-mono text-cyan-300 font-bold">{gameState.roomCode}</span></p>
-        <div className="mt-4 text-[11px] text-slate-500 max-w-xs">
-          Si la pantalla no carga, vuelve a unirte introduciendo tu nombre y personaje en el Lobby.
-        </div>
-      </div>
-    );
+    return <JoyPhoneSetup initialRoomCode={gameState.roomCode} />;
   }
 
   const char = CHARACTERS[me.characterId] || CHARACTERS.mario;

@@ -5,6 +5,7 @@ import { CharacterId } from '@/types/game';
 import { network } from '@/services/network';
 import { sounds } from '@/audio/soundEffects';
 import { CharacterAvatar } from '@/components/Common/CharacterAvatar';
+import { getMobileJoinUrl, getQrCodeImageUrl } from '@/utils/networkUrl';
 
 interface LobbyScreenProps {
   onStartHost: () => void;
@@ -67,6 +68,10 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
         setIsConnecting(false);
         const player = joinPlayer(nameInput.trim(), selectedCharacter);
         setMyPlayerId(player.id);
+        if (typeof window !== 'undefined' && window.sessionStorage) {
+          window.sessionStorage.setItem('sprint_party_player_id', player.id);
+          window.sessionStorage.setItem('sprint_party_room_code', roomCode);
+        }
         // Inform host
         network.sendToHost({
           type: 'JOIN_ROOM',
@@ -79,18 +84,18 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
         setIsConnecting(false);
         const player = joinPlayer(nameInput.trim(), selectedCharacter);
         setMyPlayerId(player.id);
+        if (typeof window !== 'undefined' && window.sessionStorage) {
+          window.sessionStorage.setItem('sprint_party_player_id', player.id);
+          window.sessionStorage.setItem('sprint_party_room_code', roomCode);
+        }
         onStartController();
       }
     );
   };
 
   // QR Code URL pointing to player controller with auto-filled room code
-  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
-  const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
-  const mobileJoinUrl = `${currentOrigin}${currentPath}?room=${gameState.roomCode}&mode=controller`;
-  const qrCodeImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
-    mobileJoinUrl
-  )}`;
+  const mobileJoinUrl = getMobileJoinUrl(gameState.roomCode);
+  const qrCodeImageUrl = getQrCodeImageUrl(mobileJoinUrl, 200);
 
   return (
     <div className="min-h-screen w-full bg-slate-950 text-white flex flex-col items-center justify-center p-4 relative overflow-hidden select-none">
@@ -257,21 +262,43 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
               <span>📺</span>
               <span>Proyectar Tablero 3D</span>
             </button>
-            <button
-              onClick={() => {
-                if (gameState.players.length === 0) {
+
+            {gameState.players.length === 0 && (
+              <button
+                onClick={() => {
                   joinPlayer('Alex', 'mario', 'Front');
                   joinPlayer('Sofía', 'luigi', 'Back');
                   joinPlayer('Mateo', 'peach', 'QA');
                   joinPlayer('Lucía', 'yoshi', 'UX');
+                }}
+                className="py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 border border-yellow-400/30 text-yellow-300 text-xs font-bold transition-all shrink-0 flex items-center justify-center gap-1.5"
+                title="Añadir 4 compañeros de prueba"
+              >
+                <span>🤖</span>
+                <span>Añadir Bots (4)</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => {
+                if (gameState.players.length > 0) {
+                  startGame();
+                  onStartHost();
                 }
-                startGame();
-                onStartHost();
               }}
-              className="flex-1 py-3.5 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-slate-950 font-extrabold text-sm uppercase tracking-wide hover:brightness-110 active:scale-98 shadow-xl flex items-center justify-center gap-2"
+              disabled={gameState.players.length === 0}
+              className={`flex-1 py-3.5 rounded-xl text-sm font-extrabold uppercase tracking-wide transition-all shadow-xl flex items-center justify-center gap-2 ${
+                gameState.players.length > 0
+                  ? 'bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-slate-950 hover:brightness-110 active:scale-98 cursor-pointer'
+                  : 'bg-slate-800 border border-white/10 text-slate-500 cursor-not-allowed opacity-60'
+              }`}
             >
               <span>▶</span>
-              <span>¡Iniciar Partida! ({gameState.players.length} Jugadores)</span>
+              <span>
+                {gameState.players.length > 0
+                  ? `¡Iniciar Partida! (${gameState.players.length} Jugadores)`
+                  : 'Esperando Jugadores (0/6)'}
+              </span>
             </button>
           </div>
         </div>

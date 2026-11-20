@@ -183,6 +183,8 @@ export interface GameState {
 // Network message contracts for Jackbox-style real-time sync
 export type NetworkAction =
   | { type: 'JOIN_ROOM'; player: { name: string; characterId: CharacterId } }
+  | { type: 'REQUEST_SYNC' }
+  | { type: 'PEER_CONNECTED'; peerId: string }
   | { type: 'SYNC_STATE'; state: GameState }
   | { type: 'ROLL_DICE'; playerId: string }
   | { type: 'USE_POWERUP'; playerId: string; powerUp: PowerUpType; targetPlayerId?: string }

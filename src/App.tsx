@@ -11,10 +11,11 @@ type ViewMode = 'lobby' | 'host' | 'controller' | 'demo';
 const GameMain: React.FC = () => {
   const { gameState, joinPlayer, setMyPlayerId, startGame } = useGame();
   const [view, setView] = useState<ViewMode>(() => {
-    // If URL contains mode=controller, default to controller view
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      if (params.get('mode') === 'controller') return 'controller';
+      if (params.get('mode') === 'controller' || params.get('room')) return 'controller';
+      if (params.get('mode') === 'host' || params.get('view') === 'host') return 'host';
+      if (params.get('mode') === 'demo') return 'demo';
     }
     return 'lobby';
   });
