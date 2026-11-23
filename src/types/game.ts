@@ -182,6 +182,9 @@ export interface GameState {
   seenMinigames?: Record<string, boolean>;
 }
 
+export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'offline';
+export type JoinStatus = 'idle' | 'joining' | 'confirmed' | 'error';
+
 // Network message contracts for Jackbox-style real-time sync
 export type NetworkAction =
   | { type: 'JOIN_ROOM'; player: { id?: string; name: string; characterId: CharacterId; role?: string } }
@@ -193,7 +196,8 @@ export type NetworkAction =
   | { type: 'ROLL_DICE'; playerId: string }
   | { type: 'USE_POWERUP'; playerId: string; powerUp: PowerUpType; targetPlayerId?: string }
   | { type: 'SUBMIT_RETRO_CARD'; card: Omit<RetroCard, 'id' | 'timestamp'> }
-  | { type: 'SUBMIT_MINIGAME_TAP'; playerId: string }
+  | { type: 'SUBMIT_PEAJE_CARD'; card: Omit<RetroCard, 'id' | 'timestamp'> }
+  | { type: 'SUBMIT_MINIGAME_TAP'; playerId: string; count?: number }
   | { type: 'SUBMIT_MINIGAME_VOTE'; voterId: string; targetId: string }
   | { type: 'NEXT_TURN' }
   | { type: 'TRIGGER_MINIGAME'; minigameType: MinigameType }

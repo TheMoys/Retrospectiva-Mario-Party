@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Check, Copy, Globe, Wifi } from 'lucide-react';
 import { useGame } from '@/context/GameContext';
 import { GameBoard3D } from '@/Three/GameBoard3D';
 import { TopScoreboard } from './TopScoreboard';
@@ -14,13 +15,20 @@ import { QuickVoteMinigame } from '@/components/Minigames/QuickVoteMinigame';
 import { MinigameIntroModal } from '@/components/Minigames/MinigameIntroModal';
 import { CinematicDiceOverlay } from '@/components/Common/CinematicDiceOverlay';
 import { RoundSelector } from './RoundSelector';
-import { getMobileJoinUrl, getQrCodeImageUrl, DEFAULT_TUNNEL_URL } from '@/utils/networkUrl';
-import { network } from '@/services/network';
+import {
+  copyTextToClipboard,
+  fetchLocalTunnelUrl,
+  getConnectionStatusMeta,
+  getMobileJoinUrl,
+  getQrCodeImageUrl,
+  isPublicHttpsOrigin,
+} from '@/utils/networkUrl';
 import { CharacterId } from '@/types/game';
 
 export const HostScreen: React.FC = () => {
   const {
     gameState,
+    connectionStatus,
     triggerMinigame,
     startMinigamePlay,
     enterPeaje,
@@ -36,35 +44,38 @@ export const HostScreen: React.FC = () => {
   const [normasOpen, setNormasOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Ensure Host initializes WebRTC PeerJS on mount so phones can connect
+  const [tunnelUrl, setTunnelUrl] = useState<string | null>(null);
+  const [networkMode, setNetworkMode] = useState<'tunnel' | 'wifi'>('wifi');
+
+  // Ensure Host mode is active on mount (GameContext manages transport idempotently)
   useEffect(() => {
     setIsHost(true);
-    network.initHost(gameState.roomCode, (peerId) => {
-      console.log('Host WebRTC active with Peer ID:', peerId);
-    });
-  }, [gameState.roomCode, setIsHost]);
+  }, [setIsHost]);
 
-  const [tunnelUrl, setTunnelUrl] = useState<string>(DEFAULT_TUNNEL_URL);
-  const [networkMode, setNetworkMode] = useState<'tunnel' | 'wifi'>('tunnel');
-
+  // Only discover local dev tunnel when running Vite dev server on localhost/127.0.0.1
   useEffect(() => {
-    fetch('/api/tunnel')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.active && data.url) {
-          setTunnelUrl(data.url);
-        }
-      })
-      .catch(() => {});
+    let active = true;
+    fetchLocalTunnelUrl().then((url) => {
+      if (active && url) {
+        setTunnelUrl(url);
+        setNetworkMode('tunnel');
+      }
+    });
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const activeBaseUrl = networkMode === 'tunnel' && tunnelUrl ? tunnelUrl : undefined;
+  const hasActiveTunnel = Boolean(tunnelUrl);
+  const activeBaseUrl = hasActiveTunnel && networkMode === 'tunnel' ? tunnelUrl! : undefined;
   const mobileJoinUrl = getMobileJoinUrl(gameState.roomCode, activeBaseUrl);
   const qrCodeImageUrl = getQrCodeImageUrl(mobileJoinUrl, 200);
+  const isCloudHttps = isPublicHttpsOrigin();
+  const statusMeta = getConnectionStatusMeta(connectionStatus, gameState.roomCode);
 
-  const handleCopyLink = () => {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(mobileJoinUrl);
+  const handleCopyLink = async () => {
+    const ok = await copyTextToClipboard(mobileJoinUrl);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
@@ -90,7 +101,7 @@ export const HostScreen: React.FC = () => {
 
   return (
     <div className="relative w-full h-full bg-slate-950 overflow-hidden select-none flex flex-col font-game">
-      {/* 1. Top TV HUD Scoreboard (Matching Reference) */}
+      {/* 1. Top TV HUD Scoreboard */}
       <TopScoreboard
         gameState={gameState}
         onOpenNormas={() => setNormasOpen(true)}
@@ -105,66 +116,119 @@ export const HostScreen: React.FC = () => {
         {/* Live Active Turn / Status Toast */}
         {gameState.activeMessage && (
           <div className="absolute top-16 left-1/2 transform -translate-x-1/2 z-20 pointer-events-none max-w-lg w-full px-4 text-center">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-900/90 border border-yellow-400/40 text-yellow-300 font-bold text-xs md:text-sm shadow-2xl backdrop-blur-md animate-fade-in">
-              <span className="text-sm">📢</span>
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-900/90 border border-yellow-400/40 text-yellow-200 font-bold text-xs md:text-sm shadow-2xl backdrop-blur-md animate-fade-in">
+              <span className="text-sm" aria-hidden="true">📢</span>
               <span>{gameState.activeMessage}</span>
             </div>
           </div>
         )}
 
+        {/* Compact Live Connection Pill during gameplay */}
+        {gameState.phase !== 'lobby' && (
+          <div
+            role="status"
+            aria-live="polite"
+            className={`absolute top-4 right-4 z-20 inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-bold shadow-xl backdrop-blur-md ${statusMeta.badgeClass}`}
+          >
+            <span
+              className={`w-2 h-2 rounded-full shrink-0 ${statusMeta.dotClass} ${
+                statusMeta.isAnimated ? 'animate-pulse motion-reduce:animate-none' : ''
+              }`}
+              aria-hidden="true"
+            />
+            <span>{statusMeta.label}</span>
+          </div>
+        )}
+
         {/* LOBBY FLOATING QR CARD (Visible during lobby phase) */}
         {gameState.phase === 'lobby' && (
-          <div className="absolute top-20 left-6 z-30 p-3.5 rounded-3xl bg-slate-900/95 border-2 border-yellow-400/50 shadow-2xl backdrop-blur-md flex flex-col items-center gap-2 max-w-[220px] animate-fade-in">
+          <div className="absolute top-20 left-6 z-30 p-4 rounded-3xl bg-slate-900/95 border-2 border-yellow-400/50 shadow-2xl backdrop-blur-md flex flex-col items-center gap-2.5 w-[240px] animate-fade-in">
+            {/* Truthful Live Connection Pill */}
+            <div
+              role="status"
+              aria-live="polite"
+              className={`w-full justify-center inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-bold shadow-sm ${statusMeta.badgeClass}`}
+            >
+              <span
+                className={`w-2 h-2 rounded-full shrink-0 ${statusMeta.dotClass} ${
+                  statusMeta.isAnimated ? 'animate-pulse motion-reduce:animate-none' : ''
+                }`}
+                aria-hidden="true"
+              />
+              <span className="truncate">{statusMeta.label}</span>
+            </div>
+
             <div className="bg-white p-2 rounded-2xl shadow-inner">
               <img
                 src={qrCodeImageUrl}
-                alt="Código QR para unirse"
+                alt={`Código QR para unirse a la sala ${gameState.roomCode}`}
+                width={144}
+                height={144}
                 className="w-36 h-36 rounded-lg object-contain"
               />
             </div>
-            <div className="text-center w-full">
-              <div className="text-[10px] uppercase font-bold text-slate-400">Escanea con tu móvil</div>
-              <div className="text-2xl font-black text-yellow-300 tracking-wider font-pixel my-0.5">{gameState.roomCode}</div>
 
-              {/* Mode switch between Public Tunnel (Univ / 4G / 5G) and Local Wi-Fi */}
-              <div className="flex items-center justify-center bg-slate-950/90 p-0.5 rounded-lg border border-white/15 text-[9px] my-1 shadow">
-                <button
-                  type="button"
-                  onClick={() => setNetworkMode('tunnel')}
-                  className={`px-2 py-0.5 rounded font-extrabold transition-all ${
-                    networkMode === 'tunnel' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  🌐 Univ / 4G
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setNetworkMode('wifi')}
-                  className={`px-2 py-0.5 rounded font-extrabold transition-all ${
-                    networkMode === 'wifi' ? 'bg-amber-600 text-white shadow' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  📶 Wi-Fi Local
-                </button>
+            <div className="text-center w-full">
+              <div className="text-[11px] uppercase font-bold text-slate-300">Escanea con tu móvil</div>
+              <div className="text-2xl font-black text-yellow-300 tracking-wider font-pixel my-1">
+                {gameState.roomCode}
               </div>
 
-              <div className="text-[11px] font-bold text-cyan-300 bg-slate-950/80 px-2.5 py-1 rounded-xl border border-white/10 mt-1">
+              {/* Local Dev Tunnel Switcher (ONLY when localhost + /api/tunnel active:true) */}
+              {hasActiveTunnel ? (
+                <div className="flex flex-col gap-1.5 my-1.5">
+                  <div className="flex items-center justify-center bg-slate-950/90 p-1 rounded-xl border border-white/15 text-[11px] shadow gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setNetworkMode('tunnel')}
+                      className={`flex-1 min-h-[36px] px-2 py-1 rounded-lg font-extrabold transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                        networkMode === 'tunnel' ? 'bg-blue-700 text-white shadow' : 'text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      <Globe className="w-3 h-3 shrink-0" aria-hidden="true" />
+                      <span>Túnel</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNetworkMode('wifi')}
+                      className={`flex-1 min-h-[36px] px-2 py-1 rounded-lg font-extrabold transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                        networkMode === 'wifi' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      <Wifi className="w-3 h-3 shrink-0" aria-hidden="true" />
+                      <span>Wi-Fi</span>
+                    </button>
+                  </div>
+                </div>
+              ) : isCloudHttps ? (
+                <div className="text-[11px] text-emerald-200 font-semibold bg-emerald-950/90 border border-emerald-400/45 px-2.5 py-1.5 rounded-xl mt-1 leading-snug">
+                  🌐 Conectado en la nube · Funciona con cualquier Wi-Fi o datos móviles
+                </div>
+              ) : (
+                <div className="text-[11px] text-cyan-100 font-semibold bg-slate-950/85 border border-cyan-400/35 px-2.5 py-1.5 rounded-xl mt-1 leading-snug">
+                  📶 Red local · Comparte este enlace en tu red o navegador
+                </div>
+              )}
+
+              <div className="text-xs font-bold text-cyan-200 bg-slate-950/90 px-2.5 py-1 rounded-xl border border-white/15 mt-2">
                 {gameState.players.length}/6 Jugadores
               </div>
 
-              <div className="text-[9px] text-slate-300 font-medium mt-1">
-                {networkMode === 'tunnel' ? '🌐 Cualquier Wi-Fi o 4G/5G' : '📶 Misma Wi-Fi requerida'}
-              </div>
-
               <button
-                onClick={handleCopyLink}
-                className={`mt-1.5 w-full py-1.5 px-2 rounded-lg text-[10px] border border-white/10 transition-all font-bold cursor-pointer shadow ${
+                type="button"
+                onClick={() => void handleCopyLink()}
+                className={`mt-2 w-full min-h-[44px] py-2 px-3 rounded-xl text-xs border transition-all font-extrabold cursor-pointer shadow flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 ${
                   copied
-                    ? 'bg-emerald-600 text-white ring-1 ring-emerald-400'
-                    : 'bg-slate-800 hover:bg-slate-700 text-white'
+                    ? 'bg-emerald-700 text-white border-emerald-300 ring-1 ring-emerald-300'
+                    : 'bg-slate-800 hover:bg-slate-700 text-white border-white/20 active:scale-95'
                 }`}
               >
-                {copied ? '✓ ¡Copiado!' : '📋 Copiar Enlace'}
+                {copied ? (
+                  <Check className="w-4 h-4 shrink-0" aria-hidden="true" />
+                ) : (
+                  <Copy className="w-4 h-4 shrink-0" aria-hidden="true" />
+                )}
+                <span>{copied ? '¡Enlace copiado!' : 'Copiar Enlace'}</span>
               </button>
             </div>
           </div>
@@ -181,48 +245,50 @@ export const HostScreen: React.FC = () => {
           </div>
         )}
 
-        {/* Bottom Left Legend for Spaces (Compact & Clean) */}
-        <div className="absolute bottom-4 left-4 z-20 hidden sm:flex select-none pointer-events-none">
-          <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-slate-900/85 border border-white/10 text-[10px] font-bold backdrop-blur-md shadow-xl">
-            <span className="flex items-center gap-1 text-emerald-400">
-              <span className="w-2 h-2 rounded-full bg-emerald-400" /> Seguir
+        {/* Bottom Left Legend for Spaces (Positioned clear of Sound Toggle button) */}
+        <div className="absolute bottom-4 left-16 z-20 hidden sm:flex select-none pointer-events-none">
+          <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-slate-900/90 border border-white/15 text-[11px] font-bold backdrop-blur-md shadow-xl">
+            <span className="flex items-center gap-1 text-emerald-300">
+              <span className="w-2 h-2 rounded-full bg-emerald-400" aria-hidden="true" /> Seguir
             </span>
-            <span className="flex items-center gap-1 text-amber-400">
-              <span className="w-2 h-2 rounded-full bg-amber-400" /> Mejorar
+            <span className="flex items-center gap-1 text-amber-300">
+              <span className="w-2 h-2 rounded-full bg-amber-400" aria-hidden="true" /> Mejorar
             </span>
-            <span className="flex items-center gap-1 text-rose-400">
-              <span className="w-2 h-2 rounded-full bg-rose-400" /> Dejar
+            <span className="flex items-center gap-1 text-rose-300">
+              <span className="w-2 h-2 rounded-full bg-rose-400" aria-hidden="true" /> Dejar
             </span>
-            <span className="flex items-center gap-1 text-purple-400">
-              <span className="w-2 h-2 rounded-full bg-purple-400" /> Evento
+            <span className="flex items-center gap-1 text-purple-300">
+              <span className="w-2 h-2 rounded-full bg-purple-400" aria-hidden="true" /> Evento
             </span>
           </div>
         </div>
 
         {/* Floating Host Controls Bar (Bottom Center) */}
-        <div className="absolute bottom-4 right-4 sm:left-1/2 sm:transform sm:-translate-x-1/2 z-20 flex items-center gap-2 bg-slate-900/85 backdrop-blur-md border border-white/10 px-3.5 py-2 rounded-2xl shadow-2xl">
+        <div className="absolute bottom-4 right-4 sm:left-1/2 sm:transform sm:-translate-x-1/2 z-20 flex items-center gap-2 bg-slate-900/90 backdrop-blur-md border border-white/15 px-3.5 py-2 rounded-2xl shadow-2xl">
           {gameState.phase === 'lobby' ? (
             <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={startGame}
                 disabled={gameState.players.length === 0}
-                className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-xl flex items-center gap-2 ${
+                className={`min-h-[44px] px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-xl flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300 ${
                   gameState.players.length > 0
-                    ? 'bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-slate-950 hover:brightness-110 active:scale-95 animate-pulse cursor-pointer'
-                    : 'bg-slate-800 border border-white/10 text-slate-500 cursor-not-allowed opacity-60'
+                    ? 'bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-slate-950 hover:brightness-105 active:scale-95 animate-pulse motion-reduce:animate-none cursor-pointer'
+                    : 'bg-slate-800 border border-white/15 text-slate-300 cursor-not-allowed opacity-65'
                 }`}
               >
-                <span>▶</span>
+                <span aria-hidden="true">▶</span>
                 <span>¡EMPEZAR A JUGAR! ({gameState.players.length} JUGADORES)</span>
               </button>
 
               {gameState.players.length === 0 && (
                 <button
+                  type="button"
                   onClick={handleAddTestBots}
-                  className="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-yellow-400/30 text-yellow-300 text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
+                  className="min-h-[44px] px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-yellow-400/40 text-yellow-200 text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300"
                   title="Añadir 4 compañeros de prueba para probar sin móviles"
                 >
-                  <span>🤖</span>
+                  <span aria-hidden="true">🤖</span>
                   <span>Añadir Bots (4)</span>
                 </button>
               )}
@@ -230,10 +296,11 @@ export const HostScreen: React.FC = () => {
           ) : (
             <>
               <button
+                type="button"
                 onClick={() => nextTurn()}
-                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 text-xs font-black uppercase hover:brightness-110 active:scale-95 transition-all shadow-md flex items-center gap-1"
+                className="min-h-[44px] px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 text-xs font-black uppercase hover:brightness-105 active:scale-95 transition-all shadow-md flex items-center gap-1 cursor-pointer"
               >
-                <span>🎲</span>
+                <span aria-hidden="true">🎲</span>
                 <span>Avanzar Turno</span>
               </button>
 
@@ -241,15 +308,17 @@ export const HostScreen: React.FC = () => {
 
               {/* Trigger Minigames */}
               <button
+                type="button"
                 onClick={() => triggerMinigame('block_smash')}
-                className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-400/30 text-xs font-bold"
+                className="min-h-[44px] px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-200 border border-amber-400/40 text-xs font-bold cursor-pointer"
               >
                 ⚡ Machaca ?
               </button>
 
               <button
+                type="button"
                 onClick={() => triggerMinigame('quick_vote')}
-                className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-400/30 text-xs font-bold"
+                className="min-h-[44px] px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-200 border border-cyan-400/40 text-xs font-bold cursor-pointer"
               >
                 🗳️ Votación
               </button>
@@ -258,23 +327,26 @@ export const HostScreen: React.FC = () => {
 
               {/* Peaje & Podium */}
               <button
+                type="button"
                 onClick={() => enterPeaje()}
-                className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-purple-300 border border-purple-400/30 text-xs font-bold"
+                className="min-h-[44px] px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-purple-200 border border-purple-400/40 text-xs font-bold cursor-pointer"
               >
                 🚧 El Peaje
               </button>
 
               <button
+                type="button"
                 onClick={() => enterPodium()}
-                className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 text-xs font-black flex items-center gap-1 shadow-md hover:brightness-110"
+                className="min-h-[44px] px-3 py-2 rounded-xl bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 text-xs font-black flex items-center gap-1 shadow-md hover:brightness-105 cursor-pointer"
               >
-                <span>🏆</span>
+                <span aria-hidden="true">🏆</span>
                 <span>Podio</span>
               </button>
 
               <button
+                type="button"
                 onClick={() => setExportModalOpen(true)}
-                className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold border border-white/10"
+                className="min-h-[44px] px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-white/15 cursor-pointer"
               >
                 📋 Acta ({gameState.retroCards.length})
               </button>

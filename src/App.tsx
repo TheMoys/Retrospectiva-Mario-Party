@@ -8,23 +8,39 @@ import { sounds } from '@/audio/soundEffects';
 
 type ViewMode = 'lobby' | 'host' | 'controller' | 'demo';
 
-const GameMain: React.FC = () => {
-  const { gameState, joinPlayer, setMyPlayerId, startGame } = useGame();
-  const [view, setView] = useState<ViewMode>(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('mode') === 'controller' || params.get('room')) return 'controller';
-      if (params.get('mode') === 'host' || params.get('view') === 'host') return 'host';
-      if (params.get('mode') === 'demo') return 'demo';
-    }
-    return 'lobby';
-  });
+function getInitialViewState(): { initialView: ViewMode; lockedControllerFromUrl: boolean } {
+  if (typeof window === 'undefined') {
+    return { initialView: 'lobby', lockedControllerFromUrl: false };
+  }
+  const params = new URLSearchParams(window.location.search);
+  const mode = params.get('mode');
+  const viewParam = params.get('view');
 
+  if (mode === 'controller') {
+    return { initialView: 'controller', lockedControllerFromUrl: true };
+  }
+  if (mode === 'host' || viewParam === 'host') {
+    return { initialView: 'host', lockedControllerFromUrl: false };
+  }
+  if (mode === 'demo') {
+    return { initialView: 'demo', lockedControllerFromUrl: false };
+  }
+  if (params.get('room')) {
+    return { initialView: 'controller', lockedControllerFromUrl: true };
+  }
+  return { initialView: 'lobby', lockedControllerFromUrl: false };
+}
+
+const GameMain: React.FC = () => {
+  const { gameState, joinPlayer, setMyPlayerId, setIsHost, startGame, leaveControllerSession } = useGame();
+  const [initialRoute] = useState(getInitialViewState);
+  const [view, setView] = useState<ViewMode>(initialRoute.initialView);
   const [isMuted, setIsMuted] = useState(false);
 
   // Handle Demo Launch (Pre-fill 4 team players & start game directly)
   const handleStartDemo = () => {
     sounds.playStarFanfare();
+    setIsHost(true);
 
     // If no players exist, auto-join 4 team members
     if (gameState.players.length === 0) {
@@ -44,17 +60,28 @@ const GameMain: React.FC = () => {
     setIsMuted(muted);
   };
 
+  const handleBackFromController = initialRoute.lockedControllerFromUrl
+    ? undefined
+    : () => {
+        leaveControllerSession();
+        setIsHost(true);
+        setView('lobby');
+      };
+
   return (
-    <div className="relative w-screen h-screen bg-slate-950 text-white overflow-hidden font-game">
-      {/* Sound Toggle Button (Floating safely with 44x44px touch target) */}
-      <button
-        onClick={toggleSound}
-        className="fixed bottom-4 left-4 z-50 w-11 h-11 rounded-2xl bg-slate-900/90 border border-white/20 text-sm hover:bg-slate-800 backdrop-blur-md flex items-center justify-center shadow-xl active:scale-95 transition-all"
-        title={isMuted ? 'Activar Sonido' : 'Silenciar'}
-        aria-label={isMuted ? 'Activar Sonido' : 'Silenciar'}
-      >
-        {isMuted ? '🔇' : '🔊'}
-      </button>
+    <div className="relative w-screen h-[100dvh] bg-slate-950 text-white overflow-hidden font-game">
+      {/* Floating Sound Toggle for Desktop/Host views (Controller renders sound toggle in its top bar to avoid overlapping mobile bottom controls) */}
+      {view !== 'controller' && (
+        <button
+          type="button"
+          onClick={toggleSound}
+          className="fixed bottom-4 left-4 z-50 w-11 h-11 rounded-2xl bg-slate-900/90 border border-white/25 text-sm hover:bg-slate-800 backdrop-blur-md flex items-center justify-center shadow-xl active:scale-95 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+          title={isMuted ? 'Activar Sonido' : 'Silenciar'}
+          aria-label={isMuted ? 'Activar Sonido' : 'Silenciar'}
+        >
+          {isMuted ? '🔇' : '🔊'}
+        </button>
+      )}
 
       {/* 1. LOBBY SCREEN */}
       {view === 'lobby' && (
@@ -69,7 +96,13 @@ const GameMain: React.FC = () => {
       {view === 'host' && <HostScreen />}
 
       {/* 3. MANDO JOY-PHONE REAL */}
-      {view === 'controller' && <ControllerScreen />}
+      {view === 'controller' && (
+        <ControllerScreen
+          onBackToLobby={handleBackFromController}
+          isMuted={isMuted}
+          onToggleSound={toggleSound}
+        />
+      )}
 
       {/* 4. MODO LOCAL / DEMO (Split-Screen: 3D Board on Left + Simulated Smartphone on Right) */}
       {view === 'demo' && (
