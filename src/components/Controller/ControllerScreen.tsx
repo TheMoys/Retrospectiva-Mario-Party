@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { LogOut } from 'lucide-react';
+import { LogOut, Zap } from 'lucide-react';
 import { useGame } from '@/context/GameContext';
 import { CHARACTERS } from '@/constants/characters';
 import { POWER_UPS } from '@/constants/powerUps';
@@ -110,8 +110,16 @@ export const ControllerScreen: React.FC<ControllerScreenProps> = ({
     leaveControllerSession();
   };
 
+  const activeBuffs: string[] = [];
+  if (isMyTurn && gameState.diceRoll.length === 2) activeBuffs.push('🍄 Dado x2');
+  if (me.goldenDieActive) activeBuffs.push('🎲 Dado Dorado 4–6');
+  if (me.shieldActive) activeBuffs.push('🛡️ Escudo activo');
+
   return (
-    <div className="w-full h-full max-h-full bg-slate-950 text-white flex flex-col justify-between overflow-hidden p-2.5 sm:p-3 select-none font-game gap-2">
+    <div
+      className="w-full h-full max-h-full bg-slate-950 text-white flex flex-col overflow-y-auto p-2.5 sm:p-3 pb-22 select-none font-game gap-2.5"
+      style={{ paddingBottom: 'max(5.5rem, env(safe-area-inset-bottom))' }}
+    >
       {/* 0. LIVE CONNECTION STATUS, SOUND TOGGLE & SWITCH PLAYER BAR (Mobile Controller only) */}
       {!isHost && (
         <div className="flex items-center justify-between gap-2 shrink-0">
@@ -169,7 +177,7 @@ export const ControllerScreen: React.FC<ControllerScreenProps> = ({
             <div className="text-sm font-black text-white flex items-center gap-1.5 truncate">
               <span className="truncate">{me.name}</span>
               {me.role && (
-                <span className="text-[11px] text-slate-300 font-bold shrink-0">({me.role})</span>
+                <span className="text-xs text-slate-300 font-bold shrink-0">({me.role})</span>
               )}
               {gameState.starLeaderId === me.id && (
                 <span className="shrink-0" title="Líder de estrellas">
@@ -177,7 +185,7 @@ export const ControllerScreen: React.FC<ControllerScreenProps> = ({
                 </span>
               )}
             </div>
-            <div className="text-[11px] text-yellow-300 font-bold flex items-center gap-1.5 mt-0.5 flex-wrap">
+            <div className="text-xs text-yellow-300 font-bold flex items-center gap-1.5 mt-0.5 flex-wrap">
               <span>★ {me.stars}</span>
               <span className="text-slate-400" aria-hidden="true">•</span>
               <span className="text-slate-200">{receivedCardsCount} recibidos</span>
@@ -189,43 +197,143 @@ export const ControllerScreen: React.FC<ControllerScreenProps> = ({
 
         {/* 3 Retro Medals: 🟢 Seguir, 🟡 Mejorar, 🔴 Dejar */}
         <div
-          className="flex items-center gap-1.5 bg-slate-950/90 px-2.5 py-1.5 rounded-xl border border-white/15 shrink-0"
+          className="flex items-center gap-1.5 bg-slate-950/90 px-2 py-1.5 rounded-xl border border-white/15 shrink-0"
           aria-label="Medallas de retrospectiva"
         >
           <span
-            className={`text-sm ${me.medals.seguir ? 'opacity-100 scale-110 drop-shadow' : 'opacity-25 grayscale'}`}
-            title="Medalla Seguir"
+            aria-label={`Medalla Seguir: ${me.medals.seguir ? 'conseguida' : 'pendiente'}`}
+            className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${
+              me.medals.seguir
+                ? 'bg-emerald-500/25 border border-emerald-400 text-emerald-200 shadow-sm'
+                : 'border border-dashed border-slate-500 bg-slate-900/90 text-slate-300'
+            }`}
+            title={me.medals.seguir ? 'Medalla Seguir conseguida' : 'Medalla Seguir pendiente'}
           >
-            🟢
+            S
           </span>
           <span
-            className={`text-sm ${me.medals.mejorar ? 'opacity-100 scale-110 drop-shadow' : 'opacity-25 grayscale'}`}
-            title="Medalla Mejorar"
+            aria-label={`Medalla Mejorar: ${me.medals.mejorar ? 'conseguida' : 'pendiente'}`}
+            className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${
+              me.medals.mejorar
+                ? 'bg-amber-500/25 border border-amber-400 text-amber-200 shadow-sm'
+                : 'border border-dashed border-slate-500 bg-slate-900/90 text-slate-300'
+            }`}
+            title={me.medals.mejorar ? 'Medalla Mejorar conseguida' : 'Medalla Mejorar pendiente'}
           >
-            🟡
+            M
           </span>
           <span
-            className={`text-sm ${me.medals.dejar ? 'opacity-100 scale-110 drop-shadow' : 'opacity-25 grayscale'}`}
-            title="Medalla Dejar"
+            aria-label={`Medalla Dejar: ${me.medals.dejar ? 'conseguida' : 'pendiente'}`}
+            className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${
+              me.medals.dejar
+                ? 'bg-rose-500/25 border border-rose-400 text-rose-200 shadow-sm'
+                : 'border border-dashed border-slate-500 bg-slate-900/90 text-slate-300'
+            }`}
+            title={me.medals.dejar ? 'Medalla Dejar conseguida' : 'Medalla Dejar pendiente'}
           >
-            🔴
+            D
           </span>
         </div>
       </div>
 
-      {/* 2. CENTER STAGE: Game State Banner + Tactile Dice Action Button */}
-      <div className="flex-1 flex flex-col items-center justify-center py-1 px-1 min-h-0">
+      {/* 2. UPPER-HALF SECTION: Comodines / Power-Ups Shelf (Well clear of bottom-right Netlify badge) */}
+      <section
+        aria-label="Mochila de Comodines"
+        className="p-2.5 rounded-2xl bg-slate-900/95 border border-white/15 shadow-xl shrink-0 backdrop-blur-md"
+      >
+        <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider mb-2">
+          <span className="flex items-center gap-1.5 text-slate-100">
+            <span aria-hidden="true">🎒</span>
+            <span className="font-black">COMODINES ({me.powerUps.length}/2)</span>
+          </span>
+          <span className="text-yellow-300 font-bold text-xs">Meta = +1 ★</span>
+        </div>
+
+        {me.powerUps.length === 0 ? (
+          <div className="py-2 px-3 rounded-xl bg-slate-950/80 border border-white/10 text-center text-xs text-slate-300 flex items-center justify-center gap-2">
+            <span aria-hidden="true">✨</span>
+            <span>Mochila vacía. Cae en casillas 🟣 Caos para ganar comodines.</span>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-2">
+            {me.powerUps.map((pupType, idx) => {
+              const pupInfo = POWER_UPS[pupType];
+              const canUseNow = isGameStarted && isMyTurn && !isRolling;
+              const sortedOthers = gameState.players
+                .filter((p) => p.id !== me.id)
+                .sort((a, b) => b.stars - a.stars);
+              const booTarget = sortedOthers[0];
+              const displayDesc =
+                pupType === 'boo' && booTarget
+                  ? `Envía a Boo para robarle 1 ★ al líder (${booTarget.name}).`
+                  : pupInfo.description;
+
+              return (
+                <div
+                  key={`${pupType}-${idx}`}
+                  className="p-2 px-2.5 rounded-xl bg-slate-950/90 border border-white/15 flex items-center justify-between gap-2 shadow-sm"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-xl shrink-0" aria-hidden="true">
+                      {pupInfo.icon}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="text-xs font-black text-white truncate">{pupInfo.name}</div>
+                      <div className="text-xs text-slate-300 line-clamp-2 leading-snug">
+                        {displayDesc}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    aria-label={`Usar comodín ${pupInfo.name}`}
+                    onClick={() => {
+                      usePowerUp(me.id, pupType, booTarget?.id);
+                    }}
+                    disabled={!canUseNow}
+                    className={`min-h-[44px] min-w-[68px] px-3 py-2 rounded-xl text-xs font-black uppercase shrink-0 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300 ${
+                      canUseNow
+                        ? 'bg-yellow-400 hover:bg-yellow-300 text-slate-950 shadow-md active:scale-95 cursor-pointer'
+                        : 'bg-slate-800 text-slate-300 opacity-60 cursor-not-allowed'
+                    }`}
+                  >
+                    USAR
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* 3. CENTER/LOWER STAGE: Active Buffs + Turn Banner + Tactile Dice Action Button */}
+      <div className="flex-1 flex flex-col items-center justify-center py-2 px-1 min-h-[210px]">
+        {/* Active Power-Up Buffs Indicator */}
+        {activeBuffs.length > 0 && (
+          <div className="mb-2 flex flex-wrap items-center justify-center gap-1.5">
+            {activeBuffs.map((buff) => (
+              <span
+                key={buff}
+                className="px-2.5 py-1 rounded-full bg-cyan-500/20 border border-cyan-400/50 text-cyan-200 text-xs font-extrabold shadow-sm"
+              >
+                {buff}
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Dynamic Context Status Banner */}
         <div className="mb-3 text-center w-full max-w-xs">
           {!isGameStarted ? (
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900 border border-yellow-400/40 text-yellow-200 font-bold text-xs uppercase tracking-wider shadow-md">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900 border border-yellow-400/40 text-yellow-200 font-bold text-xs uppercase tracking-wider shadow-md max-w-full">
               <span aria-hidden="true">⏳</span>
               <span>SALA DE ESPERA • ESPERANDO AL HOST</span>
             </div>
           ) : isMyTurn ? (
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-300 text-slate-950 font-black text-xs uppercase tracking-wider shadow-xl animate-bounce motion-reduce:animate-none">
-              <span aria-hidden="true">⚡</span>
-              <span>¡TU TURNO! (CASILLA {me.spaceIndex}/20)</span>
+            <div className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-300 text-slate-950 font-black text-xs uppercase tracking-wider shadow-xl animate-bounce-subtle motion-reduce:animate-none max-w-full">
+              <Zap className="w-3.5 h-3.5 fill-current shrink-0" aria-hidden="true" />
+              <span className="truncate">¡TU TURNO! (CASILLA {me.spaceIndex}/20)</span>
             </div>
           ) : (
             <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-slate-900 border border-white/15 text-slate-200 font-bold text-xs uppercase tracking-wider">
@@ -277,64 +385,6 @@ export const ControllerScreen: React.FC<ControllerScreenProps> = ({
           <p className="text-xs text-slate-300 font-semibold text-center mt-3 max-w-xs">
             ¡Conectado como <span className="text-white font-bold">{me.name}</span> ({char.name})! El Host iniciará la partida pronto.
           </p>
-        )}
-      </div>
-
-      {/* 3. BOTTOM SECTION: Mochila de Power-Ups */}
-      <div className="p-2.5 rounded-2xl bg-slate-900/95 border border-white/15 shadow-xl shrink-0 backdrop-blur-md">
-        <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider mb-1.5">
-          <span className="flex items-center gap-1.5 text-slate-100">
-            <span aria-hidden="true">🎒</span>
-            <span className="font-black">MOCHILA POWER-UPS ({me.powerUps.length}/2)</span>
-          </span>
-          <span className="text-yellow-300 font-bold">Meta = +1 ⭐</span>
-        </div>
-
-        {me.powerUps.length === 0 ? (
-          <div className="py-2 px-3 rounded-xl bg-slate-950/80 border border-white/10 text-center text-xs text-slate-300 flex items-center justify-center gap-2">
-            <span aria-hidden="true">✨</span>
-            <span>Mochila vacía. Cae en casillas 🟣 Caos para ganar objetos.</span>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {me.powerUps.map((pupType, idx) => {
-              const pupInfo = POWER_UPS[pupType];
-              return (
-                <div
-                  key={`${pupType}-${idx}`}
-                  className="p-1.5 px-2.5 rounded-xl bg-slate-950/90 border border-white/15 flex items-center justify-between gap-2 shadow-sm"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-xl shrink-0" aria-hidden="true">
-                      {pupInfo.icon}
-                    </span>
-                    <div className="min-w-0">
-                      <div className="text-xs font-black text-white truncate">{pupInfo.name}</div>
-                      <div className="text-[11px] text-slate-300 truncate">{pupInfo.description}</div>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const others = gameState.players
-                        .filter((p) => p.id !== me.id)
-                        .sort((a, b) => b.stars - a.stars);
-                      usePowerUp(me.id, pupType, others[0]?.id);
-                    }}
-                    disabled={!isGameStarted || !isMyTurn}
-                    className={`min-h-[44px] min-w-[60px] px-3 py-2 rounded-xl text-xs font-black uppercase shrink-0 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300 ${
-                      isGameStarted && isMyTurn
-                        ? 'bg-yellow-400 hover:bg-yellow-300 text-slate-950 shadow-md active:scale-95 cursor-pointer'
-                        : 'bg-slate-800 text-slate-300 opacity-60 cursor-not-allowed'
-                    }`}
-                  >
-                    USAR
-                  </button>
-                </div>
-              );
-            })}
-          </div>
         )}
       </div>
 

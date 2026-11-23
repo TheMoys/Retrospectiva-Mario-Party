@@ -107,8 +107,11 @@ const GameMain: React.FC = () => {
       {/* 4. MODO LOCAL / DEMO (Split-Screen: 3D Board on Left + Simulated Smartphone on Right) */}
       {view === 'demo' && (
         <div className="w-full h-full flex flex-row overflow-hidden bg-slate-950">
-          {/* Left: Host TV 3D Viewport */}
-          <div className="flex-1 h-full min-w-0 relative">
+          {/* Left: Host TV 3D Viewport (isolated stacking context keeps fixed Host modals out of PhoneSimulator) */}
+          <div
+            className="flex-1 h-full min-w-0 relative overflow-hidden"
+            style={{ transform: 'translateZ(0)', isolation: 'isolate' }}
+          >
             <HostScreen />
           </div>
 

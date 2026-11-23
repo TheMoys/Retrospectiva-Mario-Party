@@ -69,6 +69,7 @@ export interface Player {
   medals: PlayerMedals;
   powerUps: PowerUpType[];
   shieldActive: boolean;
+  goldenDieActive?: boolean;
   activeTrapImmunity: boolean;
   isConnected: boolean;
   isHost?: boolean;
@@ -93,6 +94,8 @@ export interface MinigameState {
   scores: Record<string, number>; // playerId -> clicks
   votes: Record<string, string>;   // voterPlayerId -> votedForPlayerId
   winnerPlayerId?: string;
+  winnerPlayerIds?: string[];
+  advanceTurnOnClose?: boolean;
 }
 
 export type GamePhase = 
@@ -127,6 +130,7 @@ export interface TargetRouletteState {
   selectedPlayerName?: string;
   selectedCharacterId?: CharacterId;
   isWildcard: boolean;
+  isDoubleKudo?: boolean;
   availableCategories?: RetroCategory[];
 }
 
@@ -200,7 +204,8 @@ export type NetworkAction =
   | { type: 'SUBMIT_MINIGAME_TAP'; playerId: string; count?: number }
   | { type: 'SUBMIT_MINIGAME_VOTE'; voterId: string; targetId: string }
   | { type: 'NEXT_TURN' }
-  | { type: 'TRIGGER_MINIGAME'; minigameType: MinigameType }
+  | { type: 'TRIGGER_MINIGAME'; minigameType: MinigameType; advanceTurnOnClose?: boolean }
+  | { type: 'CLOSE_MINIGAME_RESULTS' }
   | { type: 'RESOLVE_ROULETTE'; targetId: string }
   | { type: 'RESOLVE_CHAOS_EVENT'; eventType: ChaosEventType }
   | { type: 'RESOLVE_BONUS_STAR'; playerId: string; starType: BonusStarType; targetPlayerId?: string }

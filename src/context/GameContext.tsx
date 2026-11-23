@@ -11,6 +11,7 @@ import {
   MinigameState,
   ChaosEventType,
   BonusStarType,
+  Trap,
   ConnectionStatus,
   JoinStatus,
 } from '@/types/game';
@@ -50,11 +51,12 @@ interface GameContextType {
   resolveRoulette: (targetPlayerId: string) => void;
   resolveChaosEvent: (eventType: ChaosEventType) => void;
   submitRetroCard: (card: Omit<RetroCard, 'id' | 'timestamp'>) => void;
-  triggerMinigame: (type: MinigameType) => void;
+  triggerMinigame: (type: MinigameType, options?: { advanceTurnOnClose?: boolean }) => void;
   startMinigamePlay: () => void;
   submitMinigameTap: (playerId: string, count?: number) => void;
   submitMinigameVote: (voterId: string, targetId: string) => void;
   finishMinigame: () => void;
+  closeMinigameResults: () => void;
   enterPeaje: () => void;
   submitPeajeCard: (card: Omit<RetroCard, 'id' | 'timestamp'>) => void;
   spinBonusStar: (playerId: string) => void;
@@ -76,6 +78,109 @@ const GameContext = createContext<GameContextType | undefined>(undefined);
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const MAX_JOIN_RETRIES = 5;
 const JOIN_RETRY_INTERVAL_MS = 1500;
+
+function selectBalancedTeammate(players: Player[], activePlayerId: string, retroCards: RetroCard[]): Player | undefined {
+  const teammates = players.filter((p) => p.id !== activePlayerId);
+  if (teammates.length === 0) return undefined;
+  const receivedCountMap: Record<string, number> = {};
+  teammates.forEach((t) => {
+    receivedCountMap[t.id] = retroCards.filter((c) => c.recipientId === t.id).length;
+  });
+  const sorted = [...teammates].sort(
+    (a, b) => (receivedCountMap[a.id] || 0) - (receivedCountMap[b.id] || 0)
+  );
+  const minCount = receivedCountMap[sorted[0].id] || 0;
+  const candidates = sorted.filter((t) => (receivedCountMap[t.id] || 0) <= minCount + 1);
+  return candidates[Math.floor(Math.random() * candidates.length)] || teammates[0];
+}
+
+function advanceTurnState(
+  prev: GameState,
+  updatedPlayers: Player[],
+  options?: {
+    retroCards?: RetroCard[];
+    traps?: Trap[];
+    activeMessagePrefix?: string;
+    skipAutoMinigame?: boolean;
+  }
+): GameState {
+  const retroCards = options?.retroCards ?? prev.retroCards;
+  const traps = options?.traps ?? prev.traps;
+  const baseCleared = {
+    ...prev,
+    retroCards,
+    traps,
+    players: updatedPlayers,
+    diceRoll: [1],
+    movement: null,
+    targetRoulette: null,
+    chaosEvent: null,
+    minigame: null,
+  };
+
+  if (updatedPlayers.length === 0) {
+    return { ...baseCleared, phase: 'lobby' };
+  }
+
+  const nextIdx = (prev.activePlayerIndex + 1) % updatedPlayers.length;
+  const nextTurnNumber = prev.currentTurn + 1;
+  const newRound = Math.min(
+    prev.totalRounds,
+    Math.floor((nextTurnNumber - 1) / Math.max(1, updatedPlayers.length)) + 1
+  );
+  const allRoundsCompleted = nextTurnNumber > updatedPlayers.length * prev.totalRounds;
+
+  if (allRoundsCompleted) {
+    const anyMissingMedals = updatedPlayers.some(
+      (p) => !p.medals.seguir || !p.medals.mejorar || !p.medals.dejar
+    );
+    return {
+      ...baseCleared,
+      phase: anyMissingMedals ? 'peaje' : 'bonus_stars',
+      activeMessage: anyMissingMedals
+        ? '🚧 ¡FASE DE EL PEAJE! Nadie se va sin aportar. Completa tus medallas pendientes.'
+        : '🌟 ¡FASE DE BONUS STARS! Quienes tienen sus 3 medallas giran la ruleta de bonificación final.',
+    };
+  }
+
+  const roundJustEnded = nextIdx === 0;
+  const prefix = options?.activeMessagePrefix ? `${options.activeMessagePrefix} • ` : '';
+
+  if (roundJustEnded && !options?.skipAutoMinigame) {
+    const autoMinigameType: MinigameType = newRound % 2 === 0 ? 'block_smash' : 'quick_vote';
+    const duration = autoMinigameType === 'block_smash' ? 8000 : 12000;
+    return {
+      ...baseCleared,
+      activePlayerIndex: nextIdx,
+      currentTurn: nextTurnNumber,
+      round: newRound,
+      phase: 'minigame',
+      seenMinigames: { ...(prev.seenMinigames || {}), [autoMinigameType]: true },
+      minigame: {
+        active: true,
+        type: autoMinigameType,
+        phase: 'instructions',
+        title: autoMinigameType === 'block_smash' ? '⚡ ¡Machaca el Bloque ?!' : '🗳️ ¿Quién del equipo...?',
+        question: autoMinigameType === 'quick_vote' ? getRandomVoteQuestion().question : undefined,
+        endsAt: Date.now() + 999999,
+        countdown: duration / 1000,
+        scores: {},
+        votes: {},
+        advanceTurnOnClose: false,
+      },
+      activeMessage: `${prefix}⚡ ¡Fin de ronda! ¡MINIJUEGO EXPRESS AUTOMÁTICO!`,
+    };
+  }
+
+  return {
+    ...baseCleared,
+    activePlayerIndex: nextIdx,
+    currentTurn: nextTurnNumber,
+    round: newRound,
+    phase: 'turn_start',
+    activeMessage: `${prefix}Turno de ${updatedPlayers[nextIdx]?.name || 'Jugador'}. ¡Lanza el dado!`,
+  };
+}
 
 // Generate random 4-char unambiguous room code (e.g. K7M9, X4P2) to avoid cross-session collisions
 export function generateRoomCode(): string {
@@ -584,13 +689,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (trapIdx !== -1 && !player.shieldActive) {
           sounds.playSlip();
           const updatedTraps = prev.traps.filter((_, idx) => idx !== trapIdx);
-          return {
-            ...prev,
-            phase: 'turn_start',
-            movement: null,
+          return advanceTurnState(prev, prev.players, {
             traps: updatedTraps,
-            activeMessage: `🍌 ¡Ouch! ${player.name} resbaló con un plátano en la casilla ${landedIndex}.`,
-          };
+            activeMessagePrefix: `🍌 ¡Ouch! ${player.name} resbaló con un plátano en la casilla ${landedIndex}.`,
+          });
         }
 
         const landedSpace = BOARD_SPACES[landedIndex];
@@ -599,20 +701,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (landedSpace.type === 'green' || landedSpace.type === 'yellow') {
           const category: RetroCategory = landedSpace.type === 'green' ? 'seguir' : 'mejorar';
           const alreadyHasMedal = player.medals[category];
-
-          const teammates = prev.players.filter((p) => p.id !== player.id);
-          const receivedCountMap: Record<string, number> = {};
-          teammates.forEach((t) => {
-            receivedCountMap[t.id] = prev.retroCards.filter((c) => c.recipientId === t.id).length;
-          });
-
-          // Balanced selection: teammates with fewer received praises
-          const sorted = [...teammates].sort(
-            (a, b) => (receivedCountMap[a.id] || 0) - (receivedCountMap[b.id] || 0)
-          );
-          const minCount = receivedCountMap[sorted[0]?.id] || 0;
-          const candidates = sorted.filter((t) => (receivedCountMap[t.id] || 0) <= minCount + 1);
-          const chosen = candidates[Math.floor(Math.random() * candidates.length)] || teammates[0];
+          const chosen = selectBalancedTeammate(prev.players, player.id, prev.retroCards);
 
           sounds.playCoin();
 
@@ -628,6 +717,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
               selectedPlayerName: chosen?.name,
               selectedCharacterId: chosen?.characterId,
               isWildcard: alreadyHasMedal,
+              isDoubleKudo: false,
               availableCategories: alreadyHasMedal
                 ? (['seguir', 'mejorar', 'dejar'] as RetroCategory[]).filter((c) => !player.medals[c])
                 : undefined,
@@ -650,6 +740,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
               spinning: false,
               category: 'dejar',
               isWildcard: alreadyHasMedal,
+              isDoubleKudo: false,
               availableCategories: alreadyHasMedal
                 ? (['seguir', 'mejorar', 'dejar'] as RetroCategory[]).filter((c) => !player.medals[c])
                 : undefined,
@@ -658,7 +749,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           };
         }
 
-        // PURPLE: Evento Caos y Kudos
+        // PURPLE: Evento Caos y Kudos (power-ups se entregan en resolveChaosEvent para reflejarse al reclamar)
         if (landedSpace.type === 'purple') {
           sounds.playCoin();
           const events: Array<{ type: ChaosEventType; title: string; desc: string }> = [
@@ -686,18 +777,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ];
           const chosenEvent = events[Math.floor(Math.random() * events.length)];
 
-          // Grant power-up if item box
-          const updatedPlayers = prev.players.map((p) => {
-            if (p.id !== player.id) return p;
-            if (chosenEvent.type === 'item_box' && p.powerUps.length < 2) {
-              return { ...p, powerUps: [...p.powerUps, getRandomPowerUp()] };
-            }
-            return p;
-          });
-
           return {
             ...prev,
-            players: updatedPlayers,
             movement: null,
             phase: 'chaos_event',
             chaosEvent: {
@@ -713,12 +794,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         // START SPACE
-        return {
-          ...prev,
-          movement: null,
-          phase: 'turn_start',
-          activeMessage: `🏁 ¡${player.name} pasa por la Salida! Siguiente turno listo.`,
-        };
+        return advanceTurnState(prev, prev.players, {
+          activeMessagePrefix: `🏁 ¡${player.name} cayó en la Salida!`,
+        });
       });
     },
     [updateAndBroadcastState]
@@ -746,16 +824,19 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const roll2 = Math.floor(Math.random() * 6) + 1;
 
       // Golden die guarantee 4, 5, or 6
-      if (activePlayer.powerUps.includes('golden_die')) {
+      if (activePlayer.goldenDieActive) {
         roll1 = Math.floor(Math.random() * 3) + 4;
       }
 
       const currentRolls = hasTurbo ? [roll1, roll2] : [roll1];
       const totalSteps = currentRolls.reduce((a, b) => a + b, 0);
 
-      // 1. Enter rolling phase
+      // 1. Enter rolling phase & consume Golden Die buff
       updateAndBroadcastState((prev) => ({
         ...prev,
+        players: prev.players.map((p) =>
+          p.id === activePlayer.id && p.goldenDieActive ? { ...p, goldenDieActive: false } : p
+        ),
         phase: 'rolling',
         diceRoll: currentRolls,
         activeMessage: `🎲 ¡${activePlayer.name} tira el dado y saca un ${totalSteps}!`,
@@ -844,7 +925,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [updateAndBroadcastState]
   );
 
-  // 5. Resolve Chaos Event
+  // 5. Resolve Chaos Event (always routes to next step or advances turn cleanly)
   const resolveChaosEvent = useCallback(
     (eventType: ChaosEventType) => {
       if (!network.isHost) {
@@ -855,23 +936,80 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updateAndBroadcastState((prev) => {
         const activePlayer = prev.players[prev.activePlayerIndex];
         if (!activePlayer) return prev;
-        let updatedPlayers = prev.players.map((p) => ({ ...p }));
+
+        if (eventType === 'double_kudo') {
+          const chosen = selectBalancedTeammate(prev.players, activePlayer.id, prev.retroCards);
+          sounds.playCoin();
+          return {
+            ...prev,
+            phase: 'roulette',
+            chaosEvent: null,
+            movement: null,
+            targetRoulette: {
+              active: true,
+              spinning: true,
+              category: 'seguir',
+              selectedPlayerId: chosen?.id,
+              selectedPlayerName: chosen?.name,
+              selectedCharacterId: chosen?.characterId,
+              isWildcard: false,
+              isDoubleKudo: true,
+            },
+            activeMessage: `🎁 ¡Kudo Doble para ${activePlayer.name}! Escribe un elogio y ambos ganan +2 Estrellas.`,
+          };
+        }
+
+        if (eventType === 'speed_challenge') {
+          const duration = 8000;
+          sounds.playJump();
+          return {
+            ...prev,
+            phase: 'minigame',
+            chaosEvent: null,
+            movement: null,
+            seenMinigames: { ...(prev.seenMinigames || {}), block_smash: true },
+            minigame: {
+              active: true,
+              type: 'block_smash',
+              title: '⚡ ¡Machaca el Bloque ?!',
+              phase: 'instructions',
+              endsAt: Date.now() + 999999,
+              countdown: 8,
+              scores: {},
+              votes: {},
+              advanceTurnOnClose: true,
+            },
+            activeMessage: '⚡ ¡RETO EXPRESS SORPRESA! Ganador +2 Estrellas.',
+          };
+        }
+
+        const updatedPlayers = prev.players.map((p) => ({ ...p, powerUps: [...p.powerUps] }));
+        const activeCopy = updatedPlayers.find((p) => p.id === activePlayer.id)!;
         let msg = '';
 
-        if (eventType === 'swap_pos') {
+        if (eventType === 'item_box') {
+          if (activeCopy.powerUps.length < 2) {
+            const reward = getRandomPowerUp();
+            activeCopy.powerUps.push(reward);
+            msg = `🎒 ¡${activeCopy.name} recibió un nuevo Power-Up en su mochila!`;
+          } else {
+            activeCopy.stars += 1;
+            msg = `🎒 Mochila llena: ¡${activeCopy.name} recibe +1 Estrella extra!`;
+          }
+        } else if (eventType === 'swap_pos') {
           const others = updatedPlayers.filter((p) => p.id !== activePlayer.id);
           const randomTarget = others[Math.floor(Math.random() * others.length)];
           if (randomTarget) {
-            const activeCopy = updatedPlayers.find((p) => p.id === activePlayer.id)!;
             const tempSpace = activeCopy.spaceIndex;
             activeCopy.spaceIndex = randomTarget.spaceIndex;
             randomTarget.spaceIndex = tempSpace;
             msg = `🌪️ ¡${activeCopy.name} intercambió casilla con ${randomTarget.name}!`;
+          } else {
+            msg = `🌪️ ¡Torbellino! Sin compañeros para intercambiar posición.`;
           }
         } else if (eventType === 'steal_star') {
           const sorted = [...updatedPlayers].filter((p) => p.id !== activePlayer.id).sort((a, b) => b.stars - a.stars);
           const victim = sorted[0];
-          const activeCopy = updatedPlayers.find((p) => p.id === activePlayer.id)!;
           if (victim && victim.stars > 0 && !victim.shieldActive) {
             victim.stars -= 1;
             activeCopy.stars += 1;
@@ -881,13 +1019,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
 
-        return {
-          ...prev,
-          players: updatedPlayers,
-          phase: 'turn_start',
-          chaosEvent: null,
-          activeMessage: msg || '¡Evento Caos resuelto con éxito!',
-        };
+        return advanceTurnState(prev, updatedPlayers, {
+          activeMessagePrefix: msg || '🟣 Evento Caos resuelto',
+        });
       });
     },
     [updateAndBroadcastState]
@@ -909,89 +1043,32 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
 
       updateAndBroadcastState((prev) => {
+        const starBonus = prev.targetRoulette?.isDoubleKudo ? 2 : 1;
         const updatedPlayers = prev.players.map((p) => {
-          // Author earns +1 Star and unlocks medal
+          // Author earns starBonus and unlocks medal
           if (p.id === cardData.playerId) {
             return {
               ...p,
-              stars: p.stars + 1,
+              stars: p.stars + starBonus,
               medals: {
                 ...p.medals,
                 [cardData.category]: true,
               },
             };
           }
-          // Recipient of praise in 'seguir' earns +1 Star as well!
+          // Recipient of praise in 'seguir' earns matching starBonus!
           if (cardData.category === 'seguir' && cardData.recipientId && p.id === cardData.recipientId) {
             return {
               ...p,
-              stars: p.stars + 1,
+              stars: p.stars + starBonus,
             };
           }
           return p;
         });
 
-        const nextIdx = (prev.activePlayerIndex + 1) % prev.players.length;
-        const nextTurnNumber = prev.currentTurn + 1;
-        const newRound = Math.min(
-          prev.totalRounds,
-          Math.floor((nextTurnNumber - 1) / Math.max(1, prev.players.length)) + 1
-        );
-
-        // Check if all configured rounds are completed
-        const allRoundsCompleted = nextTurnNumber > prev.players.length * prev.totalRounds;
-
-        if (allRoundsCompleted) {
-          const anyMissingMedals = updatedPlayers.some(
-            (p) => !p.medals.seguir || !p.medals.mejorar || !p.medals.dejar
-          );
-
-          return {
-            ...prev,
-            retroCards: [newCard, ...prev.retroCards],
-            players: updatedPlayers,
-            targetRoulette: null,
-            chaosEvent: null,
-            phase: anyMissingMedals ? 'peaje' : 'bonus_stars',
-            activeMessage: anyMissingMedals
-              ? '🚧 ¡FASE DE EL PEAJE! Nadie se va sin aportar. Completa tus medallas pendientes.'
-              : '🌟 ¡FASE DE BONUS STARS! Quienes tienen sus 3 medallas giran la ruleta de bonificación final.',
-          };
-        }
-
-        // Check if a full round of players ended
-        const roundJustEnded = nextIdx === 0;
-        const autoMinigameType = newRound % 2 === 0 ? 'block_smash' : 'quick_vote';
-        const autoHasSeen = !!prev.seenMinigames?.[autoMinigameType];
-
-        return {
-          ...prev,
+        return advanceTurnState(prev, updatedPlayers, {
           retroCards: [newCard, ...prev.retroCards],
-          players: updatedPlayers,
-          activePlayerIndex: nextIdx,
-          currentTurn: nextTurnNumber,
-          round: newRound,
-          phase: roundJustEnded ? 'minigame' : 'turn_start',
-          seenMinigames: roundJustEnded ? { ...(prev.seenMinigames || {}), [autoMinigameType]: true } : prev.seenMinigames,
-          minigame: roundJustEnded
-            ? {
-                active: true,
-                type: autoMinigameType,
-                phase: autoHasSeen ? 'countdown' : 'instructions',
-                title: autoMinigameType === 'block_smash' ? '⚡ ¡Machaca el Bloque ?!' : '🗳️ ¿Quién del equipo...?',
-                question: getRandomVoteQuestion().question,
-                endsAt: Date.now() + 8000,
-                countdown: 8,
-                scores: {},
-                votes: {},
-              }
-            : null,
-          targetRoulette: null,
-          chaosEvent: null,
-          activeMessage: roundJustEnded
-            ? '⚡ ¡Fin de ronda! ¡MINIJUEGO EXPRESS AUTOMÁTICO!'
-            : `Turno de ${updatedPlayers[nextIdx]?.name}. ¡Lanza el dado!`,
-        };
+        });
       });
     },
     [updateAndBroadcastState]
@@ -1029,6 +1106,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           case 'golden_die':
             sounds.playCoin();
+            player.goldenDieActive = true;
             msg = `🎲 ¡${player.name} usó el Dado Dorado! Sacará un 4, 5 o 6.`;
             break;
 
@@ -1196,6 +1274,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         diceRoll: [1],
         targetRoulette: null,
         chaosEvent: null,
+        minigame: null,
         movement: null,
         activeMessage: `Turno de ${nextPlayer?.name || 'Siguiente jugador'}. ¡Lanza el dado!`,
       };
@@ -1204,29 +1283,27 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Minigame Triggers & Actions
   const triggerMinigame = useCallback(
-    (type: MinigameType) => {
+    (type: MinigameType, options?: { advanceTurnOnClose?: boolean }) => {
       sounds.playJump();
+      const advanceTurnOnClose = Boolean(options?.advanceTurnOnClose);
       if (!network.isHost) {
-        network.sendToHost({ type: 'TRIGGER_MINIGAME', minigameType: type });
+        network.sendToHost({ type: 'TRIGGER_MINIGAME', minigameType: type, advanceTurnOnClose });
         return;
       }
 
       updateAndBroadcastState((prev) => {
-        const alreadySeen = !!prev.seenMinigames?.[type];
-        const initialPhase: 'instructions' | 'countdown' = alreadySeen ? 'countdown' : 'instructions';
         const duration = type === 'block_smash' ? 8000 : 12000;
-        const endsAt = Date.now() + (initialPhase === 'instructions' ? 999999 : 3000 + duration);
-
         const minigameState: MinigameState = {
           active: true,
           type,
           title: type === 'block_smash' ? '⚡ ¡Machaca el Bloque ?!' : '🗳️ ¿Quién del equipo...?',
-          phase: initialPhase,
+          phase: 'instructions',
           question: type === 'quick_vote' ? getRandomVoteQuestion().question : undefined,
-          endsAt,
-          countdown: initialPhase === 'instructions' ? 10 : 3,
+          endsAt: Date.now() + 999999,
+          countdown: duration / 1000,
           scores: {},
           votes: {},
+          advanceTurnOnClose,
         };
 
         const nextSeen = { ...(prev.seenMinigames || {}), [type]: true };
@@ -1234,6 +1311,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return {
           ...prev,
           phase: 'minigame',
+          chaosEvent: null,
+          targetRoulette: null,
           minigame: minigameState,
           seenMinigames: nextSeen,
           activeMessage: `¡MINIJUEGO: ${minigameState.title}!`,
@@ -1257,9 +1336,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...prev,
         minigame: {
           ...prev.minigame,
-          phase: 'countdown',
-          countdown: 3,
-          endsAt: Date.now() + 3000 + duration,
+          phase: 'playing',
+          countdown: Math.ceil(duration / 1000),
+          endsAt: Date.now() + duration,
         },
       };
     });
@@ -1329,51 +1408,84 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Only Host resolves minigames authoritatively to avoid controller race desyncs
     if (!network.isHost) return;
 
+    let didEnterResults = false;
     updateAndBroadcastState((prev) => {
-      if (!prev.minigame) return prev;
-      let winnerId: string | undefined = undefined;
+      if (!prev.minigame || prev.minigame.phase === 'results') return prev;
+      didEnterResults = true;
 
+      let winnerIds: string[] = [];
       if (prev.minigame.type === 'block_smash') {
-        let maxClicks = -1;
-        Object.entries(prev.minigame.scores).forEach(([pId, clicks]) => {
-          if (clicks > maxClicks) {
-            maxClicks = clicks;
-            winnerId = pId;
-          }
-        });
+        const entries = Object.entries(prev.minigame.scores).filter(([, v]) => v > 0);
+        const maxClicks = entries.reduce((mx, [, v]) => Math.max(mx, v), 0);
+        if (maxClicks > 0) {
+          winnerIds = entries.filter(([, v]) => v === maxClicks).map(([pId]) => pId);
+        }
       } else {
         const counts: Record<string, number> = {};
         Object.values(prev.minigame.votes).forEach((vId) => {
           counts[vId] = (counts[vId] || 0) + 1;
         });
-        let maxVotes = -1;
-        Object.entries(counts).forEach(([vId, votes]) => {
-          if (votes > maxVotes) {
-            maxVotes = votes;
-            winnerId = vId;
-          }
-        });
+        const entries = Object.entries(counts).filter(([, v]) => v > 0);
+        const maxVotes = entries.reduce((mx, [, v]) => Math.max(mx, v), 0);
+        if (maxVotes > 0) {
+          winnerIds = entries.filter(([, v]) => v === maxVotes).map(([vId]) => vId);
+        }
       }
 
+      const winnerSet = new Set(winnerIds);
+      const updatedPlayers = prev.players.map((p) =>
+        winnerSet.has(p.id) ? { ...p, stars: p.stars + 2 } : p
+      );
+
+      const winnerNames = updatedPlayers
+        .filter((p) => winnerSet.has(p.id))
+        .map((p) => p.name);
+
+      return {
+        ...prev,
+        phase: 'minigame',
+        players: updatedPlayers,
+        minigame: {
+          ...prev.minigame,
+          phase: 'results',
+          winnerPlayerId: winnerIds[0],
+          winnerPlayerIds: winnerIds,
+        },
+        activeMessage:
+          winnerNames.length > 0
+            ? `🏆 ¡${winnerNames.join(' y ')} ganó el Minijuego (+2 Estrellas)!`
+            : '🏁 Minijuego finalizado sin puntuación.',
+      };
+    });
+
+    if (didEnterResults) {
       sounds.playStarFanfare();
-
-      const updatedPlayers = prev.players.map((p) => {
-        if (p.id === winnerId) {
-          return { ...p, stars: p.stars + 2 };
-        }
-        return p;
+      confetti({
+        particleCount: 110,
+        spread: 80,
+        origin: { y: 0.55 },
+        disableForReducedMotion: true,
       });
+    }
+  }, [updateAndBroadcastState]);
 
-      const winnerPlayer = prev.players.find((p) => p.id === winnerId);
+  const closeMinigameResults = useCallback(() => {
+    if (!network.isHost) {
+      network.sendToHost({ type: 'CLOSE_MINIGAME_RESULTS' });
+      return;
+    }
 
+    updateAndBroadcastState((prev) => {
+      if (!prev.minigame) return prev;
+      if (prev.minigame.advanceTurnOnClose) {
+        return advanceTurnState(prev, prev.players, { skipAutoMinigame: true });
+      }
+      const currentPlayer = prev.players[prev.activePlayerIndex];
       return {
         ...prev,
         phase: 'turn_start',
         minigame: null,
-        players: updatedPlayers,
-        activeMessage: winnerPlayer
-          ? `🏆 ¡${winnerPlayer.name} ganó el Minijuego y se lleva +2 Estrellas!`
-          : '¡Minijuego concluido!',
+        activeMessage: `Turno de ${currentPlayer?.name || 'Jugador'}. ¡Lanza el dado!`,
       };
     });
   }, [updateAndBroadcastState]);
@@ -1387,7 +1499,12 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [updateAndBroadcastState]);
 
   const enterPodium = useCallback(() => {
-    confetti({ particleCount: 160, spread: 90, origin: { y: 0.6 } });
+    confetti({
+      particleCount: 160,
+      spread: 90,
+      origin: { y: 0.6 },
+      disableForReducedMotion: true,
+    });
     sounds.playVictoryMusic();
     updateAndBroadcastState((prev) => ({
       ...prev,
@@ -1526,7 +1643,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } else if (action.type === 'SUBMIT_PEAJE_CARD') {
           submitPeajeCard(action.card);
         } else if (action.type === 'TRIGGER_MINIGAME') {
-          triggerMinigame(action.minigameType);
+          triggerMinigame(action.minigameType, { advanceTurnOnClose: action.advanceTurnOnClose });
+        } else if (action.type === 'CLOSE_MINIGAME_RESULTS') {
+          closeMinigameResults();
         } else if (action.type === 'SUBMIT_MINIGAME_TAP') {
           submitMinigameTap(action.playerId, action.count ?? 1);
         } else if (action.type === 'SUBMIT_MINIGAME_VOTE') {
@@ -1553,6 +1672,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     submitRetroCard,
     submitPeajeCard,
     triggerMinigame,
+    closeMinigameResults,
     submitMinigameTap,
     submitMinigameVote,
     nextTurn,
@@ -1586,6 +1706,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         submitMinigameTap,
         submitMinigameVote,
         finishMinigame,
+        closeMinigameResults,
         enterPeaje,
         submitPeajeCard,
         spinBonusStar,
