@@ -27,10 +27,10 @@ export const TopScoreboard: React.FC<TopScoreboardProps> = ({
             ⭐
           </div>
           <div>
-            <div className="text-[10px] font-black text-yellow-300 tracking-wider uppercase font-pixel leading-tight">
+            <div className="text-xs font-black text-yellow-300 tracking-wide uppercase font-game leading-tight">
               SPRINT PARTY • SENDA ARCOÍRIS 3D
             </div>
-            <div className="text-[10px] font-bold text-slate-300">
+            <div className="text-[11px] font-bold text-slate-300">
               {phase === 'lobby'
                 ? `Sala ${gameState.roomCode} • ${players.length}/6 Jugadores Conectados`
                 : `Ronda ${round}/${totalRounds} • Casilla ${players[activePlayerIndex]?.spaceIndex ?? 0}/20`}
@@ -40,10 +40,10 @@ export const TopScoreboard: React.FC<TopScoreboardProps> = ({
       </div>
 
       {/* 2. Center Players Cards or Waiting Indicator */}
-      <div className="flex-1 flex items-center justify-center gap-2 overflow-x-auto py-1 scrollbar-none">
+      <div className="flex-1 flex items-center justify-center gap-2 overflow-x-auto py-2.5 scrollbar-none">
         {players.length === 0 ? (
-          <div className="px-4 py-1.5 rounded-2xl bg-slate-900/80 border border-dashed border-yellow-400/30 text-yellow-300 font-bold text-xs flex items-center gap-2 animate-pulse">
-            <span>📱</span>
+          <div className="px-4 py-1.5 rounded-2xl bg-slate-900/80 border border-dashed border-yellow-400/30 text-yellow-300 font-bold text-xs flex items-center gap-2 animate-pulse motion-reduce:animate-none">
+            <span aria-hidden="true">📱</span>
             <span>Esperando a que los jugadores se unan con el móvil • Sala: <strong className="font-mono text-white tracking-widest">{gameState.roomCode}</strong></span>
           </div>
         ) : (
@@ -58,13 +58,13 @@ export const TopScoreboard: React.FC<TopScoreboardProps> = ({
                 className={`relative px-2.5 py-1.5 rounded-2xl transition-all duration-300 flex items-center gap-2 min-w-[125px] max-w-[155px] ${
                   isActive
                     ? 'bg-slate-900/95 ring-2 ring-yellow-400 shadow-lg shadow-yellow-500/25 scale-105 z-10'
-                    : 'bg-slate-900/60 border border-white/10 opacity-80 hover:opacity-100'
+                    : 'bg-slate-900/60 border border-white/10 opacity-85 hover:opacity-100'
                 }`}
               >
                 {/* Leader Crown Badge */}
                 {isLeader && (
-                  <div className="absolute -top-2.5 -right-1 text-xs animate-bounce" title="Líder de Estrellas">
-                    👑
+                  <div className="absolute -top-2.5 -right-1 text-xs animate-bounce motion-reduce:animate-none" title="Líder de Estrellas">
+                    <span aria-hidden="true">👑</span>
                   </div>
                 )}
 
@@ -84,7 +84,7 @@ export const TopScoreboard: React.FC<TopScoreboardProps> = ({
                       {player.name}
                     </span>
                     {player.role && (
-                      <span className="text-[9px] text-slate-400 font-semibold truncate">
+                      <span className="text-[9px] text-slate-300 font-semibold truncate">
                         ({player.role})
                       </span>
                     )}
@@ -97,16 +97,16 @@ export const TopScoreboard: React.FC<TopScoreboardProps> = ({
 
                     {/* 3 Medals Unlocked: 🟢 🟡 🔴 */}
                     <div className="flex items-center gap-0.5 text-[9px]" title="Medallas: Seguir, Mejorar, Dejar">
-                      <span className={player.medals.seguir ? 'opacity-100 scale-110' : 'opacity-20 grayscale'}>🟢</span>
-                      <span className={player.medals.mejorar ? 'opacity-100 scale-110' : 'opacity-20 grayscale'}>🟡</span>
-                      <span className={player.medals.dejar ? 'opacity-100 scale-110' : 'opacity-20 grayscale'}>🔴</span>
+                      <span className={player.medals.seguir ? 'opacity-100 scale-110' : 'opacity-25 grayscale'}>🟢</span>
+                      <span className={player.medals.mejorar ? 'opacity-100 scale-110' : 'opacity-25 grayscale'}>🟡</span>
+                      <span className={player.medals.dejar ? 'opacity-100 scale-110' : 'opacity-25 grayscale'}>🔴</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Active Turn Pill */}
                 {isActive && (
-                  <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 px-1.5 py-0.2 rounded-full bg-yellow-400 text-slate-950 text-[8px] font-black tracking-wider uppercase shadow-md animate-pulse">
+                  <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 px-1.5 py-0.5 rounded-full bg-yellow-400 text-slate-950 text-[8px] font-black tracking-wider uppercase shadow-md animate-pulse motion-reduce:animate-none leading-none">
                     TURNO
                   </div>
                 )}
@@ -119,29 +119,33 @@ export const TopScoreboard: React.FC<TopScoreboardProps> = ({
       {/* 3. Right Control Buttons: Minijuego & Normas */}
       <div className="flex items-center gap-2 shrink-0">
         <button
+          type="button"
           onClick={onTriggerMinigame}
-          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-500 text-white font-extrabold text-[11px] uppercase tracking-wider hover:brightness-110 active:scale-95 transition-all shadow-md flex items-center gap-1.5"
+          className="min-h-[44px] px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-700 to-pink-600 text-white font-extrabold text-xs uppercase tracking-wider hover:brightness-110 active:scale-95 transition-all shadow-md flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
           title="Lanzar Minijuego Express"
         >
-          <span>🎮</span>
+          <span aria-hidden="true">🎮</span>
           <span className="hidden sm:inline">Minijuego</span>
         </button>
 
         <button
+          type="button"
           onClick={onOpenNormas}
-          className="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-white/20 text-slate-300 hover:text-white font-bold text-[11px] hover:bg-slate-800 transition-all flex items-center gap-1"
+          className="min-h-[44px] px-3 py-1.5 rounded-xl bg-slate-900 border border-white/20 text-slate-200 hover:text-white font-bold text-xs hover:bg-slate-800 transition-all flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
           title="Ver Reglas y Normas"
         >
-          <span>📖</span>
+          <span aria-hidden="true">📖</span>
           <span className="hidden sm:inline">Normas</span>
         </button>
 
         <button
+          type="button"
           onClick={onResetGame}
-          className="p-1.5 rounded-xl bg-slate-900 border border-white/15 text-slate-400 hover:text-white text-xs hover:bg-slate-800 transition-all"
+          aria-label="Reiniciar partida"
+          className="min-h-[44px] min-w-[44px] p-2 rounded-xl bg-slate-900 border border-white/20 text-slate-200 hover:text-white text-sm hover:bg-slate-800 transition-all flex items-center justify-center cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
           title="Reiniciar Partida"
         >
-          🔄
+          <span aria-hidden="true">🔄</span>
         </button>
       </div>
     </div>

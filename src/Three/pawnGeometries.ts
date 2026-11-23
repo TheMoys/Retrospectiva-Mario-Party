@@ -5,6 +5,23 @@ import { CharacterId } from '@/types/game';
 
 const gltfLoader = new GLTFLoader();
 const loadedGltfCache = new Map<CharacterId, THREE.Group>();
+let cachedShadowTexture: THREE.CanvasTexture | null = null;
+
+function getSoftShadowTexture(): THREE.CanvasTexture {
+  if (cachedShadowTexture) return cachedShadowTexture;
+  const shadowCanvas = document.createElement('canvas');
+  shadowCanvas.width = 128;
+  shadowCanvas.height = 128;
+  const sCtx = shadowCanvas.getContext('2d')!;
+  const sGrad = sCtx.createRadialGradient(64, 64, 8, 64, 64, 60);
+  sGrad.addColorStop(0, 'rgba(0, 0, 0, 0.85)');
+  sGrad.addColorStop(0.5, 'rgba(0, 0, 0, 0.4)');
+  sGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  sCtx.fillStyle = sGrad;
+  sCtx.fillRect(0, 0, 128, 128);
+  cachedShadowTexture = new THREE.CanvasTexture(shadowCanvas);
+  return cachedShadowTexture;
+}
 
 /**
  * Checks and loads external GLTF/GLB models if available in /models/[characterId].glb
@@ -47,12 +64,15 @@ export function tryLoadGLTFCharacter(charId: CharacterId, onLoaded: (group: THRE
               mats.forEach((m) => {
                 m.side = THREE.DoubleSide;
                 m.depthWrite = true;
-                // Lift material specular glossiness and prevent dark muddy shading
+                // Balanced specular & roughness floor to avoid washing out pale/white GLB models under IBL
+                if ('envMapIntensity' in m && typeof (m as THREE.MeshStandardMaterial).envMapIntensity === 'number') {
+                  (m as THREE.MeshStandardMaterial).envMapIntensity = 0.72;
+                }
                 if ('roughness' in m && typeof (m as any).roughness === 'number') {
-                  (m as any).roughness = Math.min((m as any).roughness, 0.40);
+                  (m as any).roughness = Math.max(0.32, Math.min((m as any).roughness, 0.58));
                 }
                 if ('metalness' in m && typeof (m as any).metalness === 'number') {
-                  (m as any).metalness = Math.min((m as any).metalness, 0.25);
+                  (m as any).metalness = Math.min((m as any).metalness, 0.24);
                 }
               });
             }
@@ -69,7 +89,7 @@ export function tryLoadGLTFCharacter(charId: CharacterId, onLoaded: (group: THRE
 
         // Target unscaled height = 1.65 (so when scaled by 0.62 in GameBoard3D, rendered height is ~1.02 units)
         const targetHeight = 1.65;
-        const modelDimension = Math.max(size.y, size.x * 0.7, size.z * 0.7);
+        const modelDimension = Math.max(size.y, size.x * 0.9, size.z * 0.9);
         const scaleFactor = targetHeight / (modelDimension > 0.0001 ? modelDimension : 1.0);
 
         // 3. Wrap in a normalized anchor group: centered at (0, 0) and seated on feet at Y=0
@@ -108,21 +128,10 @@ export function createCharacterPawn(charId: CharacterId, neonColor: string): THR
   const pawnGroup = new THREE.Group();
   pawnGroup.name = `pawn_${charId}`;
 
-  // 1. Soft Ground Contact Shadow (Radial gradient disc)
-  const shadowCanvas = document.createElement('canvas');
-  shadowCanvas.width = 128;
-  shadowCanvas.height = 128;
-  const sCtx = shadowCanvas.getContext('2d')!;
-  const sGrad = sCtx.createRadialGradient(64, 64, 8, 64, 64, 60);
-  sGrad.addColorStop(0, 'rgba(0, 0, 0, 0.85)');
-  sGrad.addColorStop(0.5, 'rgba(0, 0, 0, 0.4)');
-  sGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-  sCtx.fillStyle = sGrad;
-  sCtx.fillRect(0, 0, 128, 128);
-
-  const shadowGeo = new THREE.PlaneGeometry(0.72, 0.72);
+  // 1. Soft Ground Contact Shadow (Shared cached radial gradient disc)
+  const shadowGeo = new THREE.PlaneGeometry(0.62, 0.62);
   const shadowMat = new THREE.MeshBasicMaterial({
-    map: new THREE.CanvasTexture(shadowCanvas),
+    map: getSoftShadowTexture(),
     transparent: true,
     depthWrite: false,
   });
@@ -131,15 +140,15 @@ export function createCharacterPawn(charId: CharacterId, neonColor: string): THR
   shadowMesh.position.y = 0.04;
   pawnGroup.add(shadowMesh);
 
-  // 2. Beveled Illuminated Acrylic Pedestal Base (Compact Tabletop Scale)
-  const baseGeo = new THREE.CylinderGeometry(0.28, 0.33, 0.08, 32);
+  // 2. Beveled Illuminated Acrylic Pedestal Base (Compact Tabletop Scale — prevents cluster overlap)
+  const baseGeo = new THREE.CylinderGeometry(0.23, 0.27, 0.075, 32);
   const baseMat = new THREE.MeshStandardMaterial({
     color: neonColor,
     emissive: neonColor,
-    emissiveIntensity: 1.15,
-    roughness: 0.12,
-    metalness: 0.80,
-    toneMapped: false,
+    emissiveIntensity: 0.62,
+    roughness: 0.18,
+    metalness: 0.72,
+    envMapIntensity: 0.95,
   });
   const baseMesh = new THREE.Mesh(baseGeo, baseMat);
   baseMesh.position.y = 0.06;
@@ -147,12 +156,33 @@ export function createCharacterPawn(charId: CharacterId, neonColor: string): THR
   baseMesh.receiveShadow = true;
   pawnGroup.add(baseMesh);
 
-  // Double perimeter luminous gold/white rim
-  const rimGeo = new THREE.RingGeometry(0.29, 0.34, 32);
-  const rimMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+  // Subtle inner metallic gold trim ring
+  const goldTrimGeo = new THREE.RingGeometry(0.20, 0.235, 32);
+  const goldTrimMat = new THREE.MeshStandardMaterial({
+    color: 0xfacc15,
+    metalness: 0.88,
+    roughness: 0.20,
+    emissive: 0xd97706,
+    emissiveIntensity: 0.22,
+    side: THREE.DoubleSide,
+  });
+  const goldTrimMesh = new THREE.Mesh(goldTrimGeo, goldTrimMat);
+  goldTrimMesh.rotation.x = -Math.PI / 2;
+  goldTrimMesh.position.y = 0.099;
+  pawnGroup.add(goldTrimMesh);
+
+  // Outer luminous edge ring
+  const rimGeo = new THREE.RingGeometry(0.245, 0.29, 32);
+  const rimMat = new THREE.MeshBasicMaterial({
+    color: neonColor,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.9,
+  });
   const rimMesh = new THREE.Mesh(rimGeo, rimMat);
+  rimMesh.name = 'pedestal_glow_ring';
   rimMesh.rotation.x = -Math.PI / 2;
-  rimMesh.position.y = 0.102;
+  rimMesh.position.y = 0.10;
   pawnGroup.add(rimMesh);
 
   // 3. Volumetric 3D Character Body Model (Harmoniously scaled ~1.04 units)
@@ -587,8 +617,10 @@ export function createCharacterPawn(charId: CharacterId, neonColor: string): THR
 
   // Check if an external GLB model exists and replace procedural mesh when loaded
   tryLoadGLTFCharacter(charId, (gltfModel) => {
+    const prevScale = charBodyGroup.scale.clone();
     pawnGroup.remove(charBodyGroup);
     gltfModel.position.y = 0.09;
+    gltfModel.scale.copy(prevScale);
     gltfModel.name = 'char_body_group';
     pawnGroup.add(gltfModel);
   });

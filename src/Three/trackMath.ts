@@ -17,7 +17,7 @@ export interface TrackPoint {
 }
 
 /**
- * Computes parametric coordinates on the 15.2 x 7.8 oval track
+ * Computes parametric coordinates on the 24.9 x 12.4 oval track
  * @param t Parameter from 0 to 1 along the circuit
  * @param laneOffset Offset perpendicular to track centerline (-2.5 to 2.5 * laneWidth)
  */
@@ -90,12 +90,39 @@ export function getTrackPoint(t: number, laneOffset: number = 0): TrackPoint {
 }
 
 /**
+ * Normalizes a board space index to its [0, 1) parametric coordinate along the track
+ */
+export function getSpaceTrackParameter(spaceIndex: number): number {
+  return (
+    (((spaceIndex % TRACK_SPECS.totalSpaces) + TRACK_SPECS.totalSpaces) %
+      TRACK_SPECS.totalSpaces) /
+    TRACK_SPECS.totalSpaces
+  );
+}
+
+/**
  * Gets exact 3D coordinates for a board space (0 to 19)
  */
 export function getSpacePosition(spaceIndex: number, yOffset: number = 0.05): THREE.Vector3 {
-  const t = (spaceIndex % TRACK_SPECS.totalSpaces) / TRACK_SPECS.totalSpaces;
+  const t = getSpaceTrackParameter(spaceIndex);
   const pt = getTrackPoint(t, 0);
   return new THREE.Vector3(pt.position.x, yOffset, pt.position.z);
+}
+
+/**
+ * Computes lateral offset (dx, 0, dz) so multiple players sharing a space sit neatly without clipping
+ */
+export function getClusterOffset(
+  playerIndexOnSpace: number = 0,
+  totalPlayersOnSpace: number = 1,
+  spaceIndex: number = 0
+): THREE.Vector3 {
+  if (totalPlayersOnSpace <= 1) {
+    return new THREE.Vector3(0, 0, 0);
+  }
+  const angle = (playerIndexOnSpace / totalPlayersOnSpace) * Math.PI * 2 + spaceIndex * 0.5;
+  const radius = Math.min(0.62, 0.34 + totalPlayersOnSpace * 0.065);
+  return new THREE.Vector3(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
 }
 
 /**
@@ -106,16 +133,9 @@ export function getPlayerPositionOnSpace(
   playerIndexOnSpace: number = 0,
   totalPlayersOnSpace: number = 1
 ): THREE.Vector3 {
-  const base = getSpacePosition(spaceIndex, 0.12);
-
-  if (totalPlayersOnSpace > 1) {
-    const angle = (playerIndexOnSpace / totalPlayersOnSpace) * Math.PI * 2 + (spaceIndex * 0.5);
-    const radius = Math.min(0.38, 0.18 + totalPlayersOnSpace * 0.04);
-    base.x += Math.cos(angle) * radius;
-    base.z += Math.sin(angle) * radius;
-  }
-
-  return base;
+  return getSpacePosition(spaceIndex, 0.10).add(
+    getClusterOffset(playerIndexOnSpace, totalPlayersOnSpace, spaceIndex)
+  );
 }
 
 /**

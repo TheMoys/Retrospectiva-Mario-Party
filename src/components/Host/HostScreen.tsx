@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Check, Copy, Globe, Wifi } from 'lucide-react';
 import { useGame } from '@/context/GameContext';
 import { GameBoard3D } from '@/Three/GameBoard3D';
@@ -46,6 +46,25 @@ export const HostScreen: React.FC = () => {
 
   const [tunnelUrl, setTunnelUrl] = useState<string | null>(null);
   const [networkMode, setNetworkMode] = useState<'tunnel' | 'wifi'>('wifi');
+  const stageContainerRef = useRef<HTMLDivElement>(null);
+  const [stageWidth, setStageWidth] = useState<number>(() =>
+    typeof window !== 'undefined' ? window.innerWidth : 1280
+  );
+
+  // Measure actual 3D stage width (fixes split-screen Demo ~870px vs full Host 1280px+)
+  useEffect(() => {
+    const el = stageContainerRef.current;
+    if (!el) return;
+    const updateWidth = () => setStageWidth(el.clientWidth || window.innerWidth);
+    updateWidth();
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(updateWidth);
+      ro.observe(el);
+      return () => ro.disconnect();
+    }
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, []);
 
   // Ensure Host mode is active on mount (GameContext manages transport idempotently)
   useEffect(() => {
@@ -72,6 +91,14 @@ export const HostScreen: React.FC = () => {
   const qrCodeImageUrl = getQrCodeImageUrl(mobileJoinUrl, 200);
   const isCloudHttps = isPublicHttpsOrigin();
   const statusMeta = getConnectionStatusMeta(connectionStatus, gameState.roomCode);
+  const isWideStage = stageWidth >= 1220;
+  const isTabletStage = stageWidth >= 720 && stageWidth < 1220;
+
+  const hostBarPositionClass = isWideStage
+    ? 'bottom-4 left-1/2 -translate-x-1/2'
+    : isTabletStage
+      ? 'bottom-4 left-[calc(50%-72px)] -translate-x-1/2'
+      : 'bottom-20 left-1/2 -translate-x-1/2';
 
   const handleCopyLink = async () => {
     const ok = await copyTextToClipboard(mobileJoinUrl);
@@ -110,13 +137,13 @@ export const HostScreen: React.FC = () => {
       />
 
       {/* 2. Fullscreen 3D WebGL Stage */}
-      <div className="flex-1 relative w-full h-full">
+      <div ref={stageContainerRef} className="flex-1 relative w-full min-h-0 overflow-hidden">
         <GameBoard3D gameState={gameState} />
 
         {/* Live Active Turn / Status Toast */}
         {gameState.activeMessage && (
-          <div className="absolute top-16 left-1/2 transform -translate-x-1/2 z-20 pointer-events-none max-w-lg w-full px-4 text-center">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-900/90 border border-yellow-400/40 text-yellow-200 font-bold text-xs md:text-sm shadow-2xl backdrop-blur-md animate-fade-in">
+          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-20 pointer-events-none max-w-lg w-full px-4 text-center">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-900/90 border border-yellow-400/40 text-yellow-200 font-bold text-xs md:text-sm shadow-2xl backdrop-blur-md animate-fade-in motion-reduce:animate-none">
               <span className="text-sm" aria-hidden="true">📢</span>
               <span>{gameState.activeMessage}</span>
             </div>
@@ -142,7 +169,7 @@ export const HostScreen: React.FC = () => {
 
         {/* LOBBY FLOATING QR CARD (Visible during lobby phase) */}
         {gameState.phase === 'lobby' && (
-          <div className="absolute top-20 left-6 z-30 p-4 rounded-3xl bg-slate-900/95 border-2 border-yellow-400/50 shadow-2xl backdrop-blur-md flex flex-col items-center gap-2.5 w-[240px] animate-fade-in">
+          <div className="absolute top-6 left-6 z-30 p-4 rounded-3xl bg-slate-900/95 border-2 border-yellow-400/50 shadow-2xl backdrop-blur-md flex flex-col items-center gap-2.5 w-[240px] animate-fade-in motion-reduce:animate-none">
             {/* Truthful Live Connection Pill */}
             <div
               role="status"
@@ -181,21 +208,23 @@ export const HostScreen: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setNetworkMode('tunnel')}
-                      className={`flex-1 min-h-[36px] px-2 py-1 rounded-lg font-extrabold transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                      aria-pressed={networkMode === 'tunnel'}
+                      className={`flex-1 min-h-[44px] px-2 py-1 rounded-lg font-extrabold transition-all flex items-center justify-center gap-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 ${
                         networkMode === 'tunnel' ? 'bg-blue-700 text-white shadow' : 'text-slate-300 hover:text-white'
                       }`}
                     >
-                      <Globe className="w-3 h-3 shrink-0" aria-hidden="true" />
+                      <Globe className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                       <span>Túnel</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setNetworkMode('wifi')}
-                      className={`flex-1 min-h-[36px] px-2 py-1 rounded-lg font-extrabold transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                      aria-pressed={networkMode === 'wifi'}
+                      className={`flex-1 min-h-[44px] px-2 py-1 rounded-lg font-extrabold transition-all flex items-center justify-center gap-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 ${
                         networkMode === 'wifi' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-300 hover:text-white'
                       }`}
                     >
-                      <Wifi className="w-3 h-3 shrink-0" aria-hidden="true" />
+                      <Wifi className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                       <span>Wi-Fi</span>
                     </button>
                   </div>
@@ -236,7 +265,7 @@ export const HostScreen: React.FC = () => {
 
         {/* LOBBY ROUND SELECTOR CARD (Floating on top right during lobby phase) */}
         {gameState.phase === 'lobby' && (
-          <div className="absolute top-20 right-6 z-30 max-w-sm sm:max-w-md w-full animate-fade-in hidden sm:block">
+          <div className="absolute top-6 right-6 z-30 max-w-sm sm:max-w-md w-full animate-fade-in motion-reduce:animate-none hidden sm:block">
             <RoundSelector
               selectedRounds={gameState.totalRounds}
               playerCount={gameState.players.length}
@@ -245,47 +274,53 @@ export const HostScreen: React.FC = () => {
           </div>
         )}
 
-        {/* Bottom Left Legend for Spaces (Positioned clear of Sound Toggle button) */}
-        <div className="absolute bottom-4 left-16 z-20 hidden sm:flex select-none pointer-events-none">
-          <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-slate-900/90 border border-white/15 text-[11px] font-bold backdrop-blur-md shadow-xl">
-            <span className="flex items-center gap-1 text-emerald-300">
-              <span className="w-2 h-2 rounded-full bg-emerald-400" aria-hidden="true" /> Seguir
-            </span>
-            <span className="flex items-center gap-1 text-amber-300">
-              <span className="w-2 h-2 rounded-full bg-amber-400" aria-hidden="true" /> Mejorar
-            </span>
-            <span className="flex items-center gap-1 text-rose-300">
-              <span className="w-2 h-2 rounded-full bg-rose-400" aria-hidden="true" /> Dejar
-            </span>
-            <span className="flex items-center gap-1 text-purple-300">
-              <span className="w-2 h-2 rounded-full bg-purple-400" aria-hidden="true" /> Evento
-            </span>
+        {/* Bottom Left Legend for Spaces (Visible cleanly on wide 1220px+ stage, aligned at 44px height) */}
+        {isWideStage && (
+          <div className="absolute bottom-4 left-[72px] z-20 flex select-none pointer-events-none">
+            <div className="min-h-[44px] flex items-center gap-2.5 px-3 py-1.5 rounded-2xl bg-slate-900/90 border border-white/15 text-[11px] font-bold backdrop-blur-md shadow-xl">
+              <span className="flex items-center gap-1 text-emerald-300">
+                <span className="w-2 h-2 rounded-full bg-emerald-400" aria-hidden="true" /> Seguir
+              </span>
+              <span className="flex items-center gap-1 text-amber-300">
+                <span className="w-2 h-2 rounded-full bg-amber-400" aria-hidden="true" /> Mejorar
+              </span>
+              <span className="flex items-center gap-1 text-rose-300">
+                <span className="w-2 h-2 rounded-full bg-rose-400" aria-hidden="true" /> Dejar
+              </span>
+              <span className="flex items-center gap-1 text-purple-300">
+                <span className="w-2 h-2 rounded-full bg-purple-400" aria-hidden="true" /> Evento
+              </span>
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Floating Host Controls Bar (Bottom Center) */}
-        <div className="absolute bottom-4 right-4 sm:left-1/2 sm:transform sm:-translate-x-1/2 z-20 flex items-center gap-2 bg-slate-900/90 backdrop-blur-md border border-white/15 px-3.5 py-2 rounded-2xl shadow-2xl">
+        {/* Floating Host Controls Bar (Bottom, responsive to stage width with >= 8px gap between buttons) */}
+        <div
+          role="toolbar"
+          aria-label="Controles del anfitrión"
+          className={`absolute ${hostBarPositionClass} z-20 flex items-center gap-2 bg-slate-900/90 backdrop-blur-md border border-white/15 p-1.5 rounded-2xl shadow-2xl w-max max-w-[calc(100vw-2rem)]`}
+        >
           {gameState.phase === 'lobby' ? (
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={startGame}
                 disabled={gameState.players.length === 0}
-                className={`min-h-[44px] px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-xl flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300 ${
+                className={`min-h-[44px] px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-xl flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300 ${
                   gameState.players.length > 0
                     ? 'bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-slate-950 hover:brightness-105 active:scale-95 animate-pulse motion-reduce:animate-none cursor-pointer'
                     : 'bg-slate-800 border border-white/15 text-slate-300 cursor-not-allowed opacity-65'
                 }`}
               >
                 <span aria-hidden="true">▶</span>
-                <span>¡EMPEZAR A JUGAR! ({gameState.players.length} JUGADORES)</span>
+                <span>¡EMPEZAR A JUGAR! ({gameState.players.length})</span>
               </button>
 
               {gameState.players.length === 0 && (
                 <button
                   type="button"
                   onClick={handleAddTestBots}
-                  className="min-h-[44px] px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-yellow-400/40 text-yellow-200 text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300"
+                  className="min-h-[44px] px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-yellow-400/40 text-yellow-200 text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300"
                   title="Añadir 4 compañeros de prueba para probar sin móviles"
                 >
                   <span aria-hidden="true">🤖</span>
@@ -298,46 +333,45 @@ export const HostScreen: React.FC = () => {
               <button
                 type="button"
                 onClick={() => nextTurn()}
-                className="min-h-[44px] px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 text-xs font-black uppercase hover:brightness-105 active:scale-95 transition-all shadow-md flex items-center gap-1 cursor-pointer"
+                className="min-h-[44px] px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 text-[11px] font-black uppercase hover:brightness-105 active:scale-95 transition-all shadow-md flex items-center gap-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-200"
               >
                 <span aria-hidden="true">🎲</span>
-                <span>Avanzar Turno</span>
+                <span>Turno</span>
               </button>
-
-              <div className="h-4 w-[1px] bg-white/20 mx-1" />
 
               {/* Trigger Minigames */}
               <button
                 type="button"
                 onClick={() => triggerMinigame('block_smash')}
-                className="min-h-[44px] px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-200 border border-amber-400/40 text-xs font-bold cursor-pointer"
+                className="min-h-[44px] px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-200 border border-amber-400/40 text-[11px] font-bold flex items-center gap-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
               >
-                ⚡ Machaca ?
+                <span aria-hidden="true">⚡</span>
+                <span>Machaca</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => triggerMinigame('quick_vote')}
-                className="min-h-[44px] px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-200 border border-cyan-400/40 text-xs font-bold cursor-pointer"
+                className="min-h-[44px] px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-200 border border-cyan-400/40 text-[11px] font-bold flex items-center gap-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
               >
-                🗳️ Votación
+                <span aria-hidden="true">🗳️</span>
+                <span>Votar</span>
               </button>
-
-              <div className="h-4 w-[1px] bg-white/20 mx-1" />
 
               {/* Peaje & Podium */}
               <button
                 type="button"
                 onClick={() => enterPeaje()}
-                className="min-h-[44px] px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-purple-200 border border-purple-400/40 text-xs font-bold cursor-pointer"
+                className="min-h-[44px] px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-purple-200 border border-purple-400/40 text-[11px] font-bold flex items-center gap-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-300"
               >
-                🚧 El Peaje
+                <span aria-hidden="true">🚧</span>
+                <span>Peaje</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => enterPodium()}
-                className="min-h-[44px] px-3 py-2 rounded-xl bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 text-xs font-black flex items-center gap-1 shadow-md hover:brightness-105 cursor-pointer"
+                className="min-h-[44px] px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 text-[11px] font-black flex items-center gap-1 shadow-md hover:brightness-105 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-200"
               >
                 <span aria-hidden="true">🏆</span>
                 <span>Podio</span>
@@ -346,9 +380,10 @@ export const HostScreen: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setExportModalOpen(true)}
-                className="min-h-[44px] px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-white/15 cursor-pointer"
+                className="min-h-[44px] px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 text-[11px] font-bold border border-white/15 flex items-center gap-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
               >
-                📋 Acta ({gameState.retroCards.length})
+                <span aria-hidden="true">📋</span>
+                <span>Acta ({gameState.retroCards.length})</span>
               </button>
             </>
           )}
