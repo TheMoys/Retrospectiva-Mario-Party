@@ -4,7 +4,7 @@ import { ChaosEventType } from '@/types/game';
 import { sounds } from '@/audio/soundEffects';
 
 export const ChaosEventModal: React.FC = () => {
-  const { gameState, resolveChaosEvent, triggerMinigame, isHost, myPlayerId } = useGame();
+  const { gameState, resolveChaosEvent, triggerMinigameRoulette, isHost, myPlayerId } = useGame();
   const { chaosEvent, players, activePlayerIndex, phase } = gameState;
 
   const [isSpinning, setIsSpinning] = useState(false);
@@ -64,7 +64,7 @@ export const ChaosEventModal: React.FC = () => {
   const handleClaim = () => {
     if (!chaosEvent.eventType || !canAct || isSpinning) return;
     if (chaosEvent.eventType === 'speed_challenge') {
-      triggerMinigame('block_smash', { advanceTurnOnClose: true });
+      triggerMinigameRoulette({ advanceTurnOnClose: true });
     } else {
       resolveChaosEvent(chaosEvent.eventType);
     }

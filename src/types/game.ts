@@ -81,18 +81,46 @@ export interface Trap {
   placedByPlayerId: string;
 }
 
-export type MinigameType = 'block_smash' | 'quick_vote';
+export type MinigameType =
+  | 'block_smash'
+  | 'quick_vote'
+  | 'blind_timer'
+  | 'planning_poker'
+  | 'simon_pipeline';
+
+export type MinigamePhase = 'roulette' | 'instructions' | 'countdown' | 'playing' | 'results';
+
+export type PipelineStepId = 'code' | 'test' | 'deploy' | 'hotfix';
+
+export interface BlindTimerEntry {
+  elapsedMs: number;
+  errorMs: number;
+}
+
+export interface SimonPipelineEntry {
+  completedRounds: number;
+  correctSteps: number;
+  failed: boolean;
+  finishedAtMs?: number;
+}
 
 export interface MinigameState {
   active: boolean;
   type: MinigameType;
   title: string;
-  phase: 'instructions' | 'countdown' | 'playing' | 'results';
+  phase: MinigamePhase;
   question?: string;
   endsAt: number;
   countdown: number;
   scores: Record<string, number>; // playerId -> clicks
   votes: Record<string, string>;   // voterPlayerId -> votedForPlayerId
+  targetMs?: number;
+  hideAfterMs?: number;
+  blindEntries?: Record<string, BlindTimerEntry>;
+  pokerBids?: Record<string, number>;
+  pipelineSequence?: PipelineStepId[];
+  simonEntries?: Record<string, SimonPipelineEntry>;
+  resultSummary?: string;
   winnerPlayerId?: string;
   winnerPlayerIds?: string[];
   advanceTurnOnClose?: boolean;
@@ -184,6 +212,7 @@ export interface GameState {
   starLeaderId?: string;
   bonusStarsAwarded?: boolean;
   seenMinigames?: Record<string, boolean>;
+  lastMinigameType?: MinigameType;
 }
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'offline';
@@ -203,8 +232,20 @@ export type NetworkAction =
   | { type: 'SUBMIT_PEAJE_CARD'; card: Omit<RetroCard, 'id' | 'timestamp'> }
   | { type: 'SUBMIT_MINIGAME_TAP'; playerId: string; count?: number }
   | { type: 'SUBMIT_MINIGAME_VOTE'; voterId: string; targetId: string }
+  | { type: 'SUBMIT_BLIND_TIMER'; playerId: string; elapsedMs: number }
+  | { type: 'SUBMIT_POKER_BID'; playerId: string; cardValue: number }
+  | {
+      type: 'SUBMIT_SIMON_PROGRESS';
+      playerId: string;
+      completedRounds: number;
+      correctSteps: number;
+      failed: boolean;
+      finishedAtMs?: number;
+    }
   | { type: 'NEXT_TURN' }
   | { type: 'TRIGGER_MINIGAME'; minigameType: MinigameType; advanceTurnOnClose?: boolean }
+  | { type: 'TRIGGER_MINIGAME_ROULETTE'; advanceTurnOnClose?: boolean }
+  | { type: 'FINISH_MINIGAME_ROULETTE' }
   | { type: 'CLOSE_MINIGAME_RESULTS' }
   | { type: 'RESOLVE_ROULETTE'; targetId: string }
   | { type: 'RESOLVE_CHAOS_EVENT'; eventType: ChaosEventType }

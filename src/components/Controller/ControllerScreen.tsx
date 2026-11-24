@@ -6,6 +6,10 @@ import { POWER_UPS } from '@/constants/powerUps';
 import { CharacterAvatar } from '@/components/Common/CharacterAvatar';
 import { BlockSmashMinigame } from '@/components/Minigames/BlockSmashMinigame';
 import { QuickVoteMinigame } from '@/components/Minigames/QuickVoteMinigame';
+import { BlindTimerMinigame } from '@/components/Minigames/BlindTimerMinigame';
+import { PlanningPokerMinigame } from '@/components/Minigames/PlanningPokerMinigame';
+import { SimonPipelineMinigame } from '@/components/Minigames/SimonPipelineMinigame';
+import { MinigameRouletteModal } from '@/components/Minigames/MinigameRouletteModal';
 import { TargetRouletteModal } from '@/components/Common/TargetRouletteModal';
 import { ChaosEventModal } from '@/components/Common/ChaosEventModal';
 import { JoyPhoneSetup } from '@/components/Controller/JoyPhoneSetup';
@@ -389,11 +393,27 @@ export const ControllerScreen: React.FC<ControllerScreenProps> = ({
       </div>
 
       {/* Minigames Overlay on Joy-Phone */}
-      {gameState.phase === 'minigame' && gameState.minigame?.type === 'block_smash' && (
-        <BlockSmashMinigame isController={true} />
+      {gameState.phase === 'minigame' && gameState.minigame?.phase === 'roulette' && (
+        <MinigameRouletteModal isController={true} />
       )}
-      {gameState.phase === 'minigame' && gameState.minigame?.type === 'quick_vote' && (
-        <QuickVoteMinigame isController={true} />
+      {gameState.phase === 'minigame' && gameState.minigame?.phase !== 'roulette' && (
+        <>
+          {gameState.minigame?.type === 'block_smash' && (
+            <BlockSmashMinigame isController={true} />
+          )}
+          {gameState.minigame?.type === 'quick_vote' && (
+            <QuickVoteMinigame isController={true} />
+          )}
+          {gameState.minigame?.type === 'blind_timer' && (
+            <BlindTimerMinigame isController={true} />
+          )}
+          {gameState.minigame?.type === 'planning_poker' && (
+            <PlanningPokerMinigame isController={true} />
+          )}
+          {gameState.minigame?.type === 'simon_pipeline' && (
+            <SimonPipelineMinigame isController={true} />
+          )}
+        </>
       )}
 
       {/* Target Roulette Modal */}

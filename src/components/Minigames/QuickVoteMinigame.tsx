@@ -14,7 +14,12 @@ export const QuickVoteMinigame: React.FC<QuickVoteProps> = ({ isController = fal
   const [timeLeft, setTimeLeft] = useState(12);
 
   useEffect(() => {
-    if (!minigame || minigame.phase === 'instructions' || minigame.phase === 'results') {
+    if (
+      !minigame ||
+      minigame.phase === 'roulette' ||
+      minigame.phase === 'instructions' ||
+      minigame.phase === 'results'
+    ) {
       return;
     }
 
@@ -62,7 +67,7 @@ export const QuickVoteMinigame: React.FC<QuickVoteProps> = ({ isController = fal
     submitMinigameVote(myPlayerId, targetId);
   };
 
-  if (!minigame) return null;
+  if (!minigame || minigame.phase === 'roulette') return null;
 
   if (minigame.phase === 'results') {
     return <MinigameResultsOverlay isController={isController} />;

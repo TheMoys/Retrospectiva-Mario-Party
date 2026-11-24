@@ -23,6 +23,25 @@ class SoundEngine {
     return this.isMuted;
   }
 
+  // Synthesize a clean pad tone (used by Simon Pipeline)
+  public playTone(freq: number, durationSec = 0.2): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+
+    gain.gain.setValueAtTime(0.16, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + durationSec);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + durationSec);
+  }
+
   // Jump sound: rising pitch square wave
   public playJump(): void {
     const ctx = this.getContext();

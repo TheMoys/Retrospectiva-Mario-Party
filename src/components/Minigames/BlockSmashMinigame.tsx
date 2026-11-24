@@ -14,7 +14,12 @@ export const BlockSmashMinigame: React.FC<BlockSmashProps> = ({ isController = f
   const [localTaps, setLocalTaps] = useState(0);
 
   useEffect(() => {
-    if (!minigame || minigame.phase === 'instructions' || minigame.phase === 'results') {
+    if (
+      !minigame ||
+      minigame.phase === 'roulette' ||
+      minigame.phase === 'instructions' ||
+      minigame.phase === 'results'
+    ) {
       return;
     }
 
@@ -51,7 +56,7 @@ export const BlockSmashMinigame: React.FC<BlockSmashProps> = ({ isController = f
     submitMinigameTap(myPlayerId);
   };
 
-  if (!minigame) return null;
+  if (!minigame || minigame.phase === 'roulette') return null;
 
   if (minigame.phase === 'results') {
     return <MinigameResultsOverlay isController={isController} />;

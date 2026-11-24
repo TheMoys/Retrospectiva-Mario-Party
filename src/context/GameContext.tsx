@@ -18,7 +18,14 @@ import {
 import { BOARD_SPACES } from '@/constants/boardSpaces';
 import { CHARACTERS, DEFAULT_TEAM_MEMBERS } from '@/constants/characters';
 import { getRandomPowerUp } from '@/constants/powerUps';
-import { getRandomVoteQuestion } from '@/constants/minigames';
+import {
+  FIBONACCI_CARDS,
+  MINIGAME_CATALOG,
+  generatePipelineSequence,
+  getRandomVoteQuestion,
+  pickBlindTargetMs,
+  pickRandomMinigame,
+} from '@/constants/minigames';
 import { sounds } from '@/audio/soundEffects';
 import { network } from '@/services/network';
 
@@ -52,9 +59,20 @@ interface GameContextType {
   resolveChaosEvent: (eventType: ChaosEventType) => void;
   submitRetroCard: (card: Omit<RetroCard, 'id' | 'timestamp'>) => void;
   triggerMinigame: (type: MinigameType, options?: { advanceTurnOnClose?: boolean }) => void;
+  triggerMinigameRoulette: (options?: { advanceTurnOnClose?: boolean }) => void;
+  finishMinigameRoulette: () => void;
   startMinigamePlay: () => void;
   submitMinigameTap: (playerId: string, count?: number) => void;
   submitMinigameVote: (voterId: string, targetId: string) => void;
+  submitBlindTimer: (playerId: string, elapsedMs: number) => void;
+  submitPokerBid: (playerId: string, cardValue: number) => void;
+  submitSimonProgress: (
+    playerId: string,
+    completedRounds: number,
+    correctSteps: number,
+    failed: boolean,
+    finishedAtMs?: number
+  ) => void;
   finishMinigame: () => void;
   closeMinigameResults: () => void;
   enterPeaje: () => void;
@@ -92,6 +110,34 @@ function selectBalancedTeammate(players: Player[], activePlayerId: string, retro
   const minCount = receivedCountMap[sorted[0].id] || 0;
   const candidates = sorted.filter((t) => (receivedCountMap[t.id] || 0) <= minCount + 1);
   return candidates[Math.floor(Math.random() * candidates.length)] || teammates[0];
+}
+
+function createMinigameState(
+  type: MinigameType,
+  options?: { startInRoulette?: boolean; advanceTurnOnClose?: boolean }
+): MinigameState {
+  const meta = MINIGAME_CATALOG[type];
+  const targetMs = type === 'blind_timer' ? pickBlindTargetMs() : undefined;
+  const durationMs = type === 'blind_timer' ? (targetMs || 7000) + 6000 : meta.durationMs;
+
+  return {
+    active: true,
+    type,
+    title: `${meta.emoji} ${meta.title}`,
+    phase: options?.startInRoulette ? 'roulette' : 'instructions',
+    question: type === 'quick_vote' ? getRandomVoteQuestion().question : undefined,
+    endsAt: Date.now() + 999999,
+    countdown: Math.ceil(durationMs / 1000),
+    scores: {},
+    votes: {},
+    targetMs,
+    hideAfterMs: type === 'blind_timer' ? 2000 : undefined,
+    blindEntries: type === 'blind_timer' ? {} : undefined,
+    pokerBids: type === 'planning_poker' ? {} : undefined,
+    pipelineSequence: type === 'simon_pipeline' ? generatePipelineSequence(10) : undefined,
+    simonEntries: type === 'simon_pipeline' ? {} : undefined,
+    advanceTurnOnClose: Boolean(options?.advanceTurnOnClose),
+  };
 }
 
 function advanceTurnState(
@@ -147,28 +193,21 @@ function advanceTurnState(
   const prefix = options?.activeMessagePrefix ? `${options.activeMessagePrefix} • ` : '';
 
   if (roundJustEnded && !options?.skipAutoMinigame) {
-    const autoMinigameType: MinigameType = newRound % 2 === 0 ? 'block_smash' : 'quick_vote';
-    const duration = autoMinigameType === 'block_smash' ? 8000 : 12000;
+    const autoMinigameType = pickRandomMinigame(prev.lastMinigameType);
+    const minigameState = createMinigameState(autoMinigameType, {
+      startInRoulette: true,
+      advanceTurnOnClose: false,
+    });
     return {
       ...baseCleared,
       activePlayerIndex: nextIdx,
       currentTurn: nextTurnNumber,
       round: newRound,
       phase: 'minigame',
+      lastMinigameType: autoMinigameType,
       seenMinigames: { ...(prev.seenMinigames || {}), [autoMinigameType]: true },
-      minigame: {
-        active: true,
-        type: autoMinigameType,
-        phase: 'instructions',
-        title: autoMinigameType === 'block_smash' ? '⚡ ¡Machaca el Bloque ?!' : '🗳️ ¿Quién del equipo...?',
-        question: autoMinigameType === 'quick_vote' ? getRandomVoteQuestion().question : undefined,
-        endsAt: Date.now() + 999999,
-        countdown: duration / 1000,
-        scores: {},
-        votes: {},
-        advanceTurnOnClose: false,
-      },
-      activeMessage: `${prefix}⚡ ¡Fin de ronda! ¡MINIJUEGO EXPRESS AUTOMÁTICO!`,
+      minigame: minigameState,
+      activeMessage: `${prefix}🎰 ¡Fin de ronda! ¡Ruleta de Minijuego!`,
     };
   }
 
@@ -1292,20 +1331,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       updateAndBroadcastState((prev) => {
-        const duration = type === 'block_smash' ? 8000 : 12000;
-        const minigameState: MinigameState = {
-          active: true,
-          type,
-          title: type === 'block_smash' ? '⚡ ¡Machaca el Bloque ?!' : '🗳️ ¿Quién del equipo...?',
-          phase: 'instructions',
-          question: type === 'quick_vote' ? getRandomVoteQuestion().question : undefined,
-          endsAt: Date.now() + 999999,
-          countdown: duration / 1000,
-          scores: {},
-          votes: {},
+        const minigameState = createMinigameState(type, {
+          startInRoulette: false,
           advanceTurnOnClose,
-        };
-
+        });
         const nextSeen = { ...(prev.seenMinigames || {}), [type]: true };
 
         return {
@@ -1313,6 +1342,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           phase: 'minigame',
           chaosEvent: null,
           targetRoulette: null,
+          lastMinigameType: type,
           minigame: minigameState,
           seenMinigames: nextSeen,
           activeMessage: `¡MINIJUEGO: ${minigameState.title}!`,
@@ -1321,6 +1351,57 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     },
     [updateAndBroadcastState]
   );
+
+  const triggerMinigameRoulette = useCallback(
+    (options?: { advanceTurnOnClose?: boolean }) => {
+      sounds.playJump();
+      const advanceTurnOnClose = Boolean(options?.advanceTurnOnClose);
+      if (!network.isHost) {
+        network.sendToHost({ type: 'TRIGGER_MINIGAME_ROULETTE', advanceTurnOnClose });
+        return;
+      }
+
+      updateAndBroadcastState((prev) => {
+        const chosenType = pickRandomMinigame(prev.lastMinigameType);
+        const minigameState = createMinigameState(chosenType, {
+          startInRoulette: true,
+          advanceTurnOnClose,
+        });
+        const nextSeen = { ...(prev.seenMinigames || {}), [chosenType]: true };
+
+        return {
+          ...prev,
+          phase: 'minigame',
+          chaosEvent: null,
+          targetRoulette: null,
+          lastMinigameType: chosenType,
+          minigame: minigameState,
+          seenMinigames: nextSeen,
+          activeMessage: '🎰 ¡Girando Ruleta de Minijuego!',
+        };
+      });
+    },
+    [updateAndBroadcastState]
+  );
+
+  const finishMinigameRoulette = useCallback(() => {
+    if (!network.isHost) {
+      network.sendToHost({ type: 'FINISH_MINIGAME_ROULETTE' });
+      return;
+    }
+
+    updateAndBroadcastState((prev) => {
+      if (!prev.minigame || prev.minigame.phase !== 'roulette') return prev;
+      return {
+        ...prev,
+        minigame: {
+          ...prev.minigame,
+          phase: 'instructions',
+        },
+        activeMessage: `¡MINIJUEGO: ${prev.minigame.title}!`,
+      };
+    });
+  }, [updateAndBroadcastState]);
 
   const startMinigamePlay = useCallback(() => {
     sounds.playCoin();
@@ -1331,7 +1412,11 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     updateAndBroadcastState((prev) => {
       if (!prev.minigame) return prev;
-      const duration = prev.minigame.type === 'block_smash' ? 8000 : 12000;
+      const meta = MINIGAME_CATALOG[prev.minigame.type];
+      const duration =
+        prev.minigame.type === 'blind_timer'
+          ? (prev.minigame.targetMs || 7000) + 6000
+          : meta.durationMs;
       return {
         ...prev,
         minigame: {
@@ -1404,6 +1489,125 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [updateAndBroadcastState]
   );
 
+  const submitBlindTimer = useCallback(
+    (playerId: string, elapsedMs: number) => {
+      sounds.playJump();
+      const clampedMs = Math.max(0, Math.round(elapsedMs));
+      if (!network.isHost) {
+        network.sendToHost({ type: 'SUBMIT_BLIND_TIMER', playerId, elapsedMs: clampedMs });
+        return;
+      }
+
+      updateAndBroadcastState((prev) => {
+        if (!prev.minigame || prev.minigame.type !== 'blind_timer' || prev.minigame.phase !== 'playing') {
+          return prev;
+        }
+        if (prev.minigame.blindEntries?.[playerId]) {
+          return prev;
+        }
+        const targetMs = prev.minigame.targetMs || 7000;
+        const entry = {
+          elapsedMs: clampedMs,
+          errorMs: Math.abs(clampedMs - targetMs),
+        };
+        return {
+          ...prev,
+          minigame: {
+            ...prev.minigame,
+            blindEntries: { ...(prev.minigame.blindEntries || {}), [playerId]: entry },
+          },
+        };
+      });
+    },
+    [updateAndBroadcastState]
+  );
+
+  const submitPokerBid = useCallback(
+    (playerId: string, cardValue: number) => {
+      sounds.playCoin();
+      if (!network.isHost) {
+        network.sendToHost({ type: 'SUBMIT_POKER_BID', playerId, cardValue });
+        return;
+      }
+
+      updateAndBroadcastState((prev) => {
+        if (!prev.minigame || prev.minigame.type !== 'planning_poker' || prev.minigame.phase !== 'playing') {
+          return prev;
+        }
+        if (!(FIBONACCI_CARDS as readonly number[]).includes(cardValue)) {
+          return prev;
+        }
+        if (prev.minigame.pokerBids?.[playerId] !== undefined) {
+          return prev;
+        }
+        return {
+          ...prev,
+          minigame: {
+            ...prev.minigame,
+            pokerBids: { ...(prev.minigame.pokerBids || {}), [playerId]: cardValue },
+          },
+        };
+      });
+    },
+    [updateAndBroadcastState]
+  );
+
+  const submitSimonProgress = useCallback(
+    (
+      playerId: string,
+      completedRounds: number,
+      correctSteps: number,
+      failed: boolean,
+      finishedAtMs?: number
+    ) => {
+      if (!network.isHost) {
+        network.sendToHost({
+          type: 'SUBMIT_SIMON_PROGRESS',
+          playerId,
+          completedRounds,
+          correctSteps,
+          failed,
+          finishedAtMs,
+        });
+        return;
+      }
+
+      updateAndBroadcastState((prev) => {
+        if (!prev.minigame || prev.minigame.type !== 'simon_pipeline' || prev.minigame.phase !== 'playing') {
+          return prev;
+        }
+        const prevEntry = prev.minigame.simonEntries?.[playerId];
+        if (prevEntry) {
+          if (prevEntry.failed && !failed) return prev;
+          if (completedRounds < prevEntry.completedRounds) return prev;
+          if (
+            completedRounds === prevEntry.completedRounds &&
+            correctSteps < prevEntry.correctSteps &&
+            !failed
+          ) {
+            return prev;
+          }
+        }
+        return {
+          ...prev,
+          minigame: {
+            ...prev.minigame,
+            simonEntries: {
+              ...(prev.minigame.simonEntries || {}),
+              [playerId]: {
+                completedRounds: Math.max(0, completedRounds),
+                correctSteps: Math.max(0, correctSteps),
+                failed,
+                finishedAtMs,
+              },
+            },
+          },
+        };
+      });
+    },
+    [updateAndBroadcastState]
+  );
+
   const finishMinigame = useCallback(() => {
     // Only Host resolves minigames authoritatively to avoid controller race desyncs
     if (!network.isHost) return;
@@ -1414,21 +1618,90 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       didEnterResults = true;
 
       let winnerIds: string[] = [];
-      if (prev.minigame.type === 'block_smash') {
-        const entries = Object.entries(prev.minigame.scores).filter(([, v]) => v > 0);
+      let resultSummary: string | undefined;
+      const mg = prev.minigame;
+
+      if (mg.type === 'block_smash') {
+        const entries = Object.entries(mg.scores).filter(([, v]) => v > 0);
         const maxClicks = entries.reduce((mx, [, v]) => Math.max(mx, v), 0);
         if (maxClicks > 0) {
           winnerIds = entries.filter(([, v]) => v === maxClicks).map(([pId]) => pId);
         }
-      } else {
+      } else if (mg.type === 'quick_vote') {
         const counts: Record<string, number> = {};
-        Object.values(prev.minigame.votes).forEach((vId) => {
+        Object.values(mg.votes).forEach((vId) => {
           counts[vId] = (counts[vId] || 0) + 1;
         });
         const entries = Object.entries(counts).filter(([, v]) => v > 0);
         const maxVotes = entries.reduce((mx, [, v]) => Math.max(mx, v), 0);
         if (maxVotes > 0) {
           winnerIds = entries.filter(([, v]) => v === maxVotes).map(([vId]) => vId);
+        }
+      } else if (mg.type === 'blind_timer') {
+        const entries = Object.entries(mg.blindEntries || {});
+        if (entries.length > 0) {
+          const minError = entries.reduce((mn, [, entry]) => Math.min(mn, entry.errorMs), Infinity);
+          winnerIds = entries.filter(([, entry]) => entry.errorMs === minError).map(([pId]) => pId);
+          const targetSec = ((mg.targetMs || 7000) / 1000).toFixed(2);
+          const errSec = (minError / 1000).toFixed(2);
+          resultSummary = `Meta: ${targetSec} s · Precisión ganadora: ±${errSec} s`;
+        } else {
+          resultSummary = 'Ningún jugador lanzó el deploy a tiempo.';
+        }
+      } else if (mg.type === 'planning_poker') {
+        const bids = Object.entries(mg.pokerBids || {});
+        if (bids.length > 0) {
+          const freq: Record<number, number> = {};
+          bids.forEach(([, val]) => {
+            freq[val] = (freq[val] || 0) + 1;
+          });
+          const uniqueEntries = bids.filter(([, val]) => freq[val] === 1);
+          const collidedCards = Array.from(
+            new Set(bids.filter(([, val]) => freq[val] > 1).map(([, val]) => val))
+          ).sort((a, b) => b - a);
+
+          if (uniqueEntries.length > 0) {
+            const maxUniqueCard = uniqueEntries.reduce((mx, [, val]) => Math.max(mx, val), 0);
+            winnerIds = uniqueEntries
+              .filter(([, val]) => val === maxUniqueCard)
+              .map(([pId]) => pId);
+            resultSummary =
+              collidedCards.length > 0
+                ? `Carta única ganadora: ${maxUniqueCard} pts · Anuladas por choque: ${collidedCards.join(', ')}`
+                : `Carta única ganadora: ${maxUniqueCard} pts`;
+          } else {
+            winnerIds = [];
+            resultSummary = `💥 ¡Choque total! Todas las cartas elegidas se repitieron (${collidedCards.join(', ')}).`;
+          }
+        } else {
+          resultSummary = 'Ningún jugador seleccionó carta Fibonacci.';
+        }
+      } else if (mg.type === 'simon_pipeline') {
+        const entries = Object.entries(mg.simonEntries || {}).filter(([, e]) => e.correctSteps > 0);
+        if (entries.length > 0) {
+          const bestEntry = entries.reduce<{ completedRounds: number; correctSteps: number } | null>(
+            (best, [, curr]) => {
+              if (!best) return curr;
+              if (curr.completedRounds !== best.completedRounds) {
+                return curr.completedRounds > best.completedRounds ? curr : best;
+              }
+              return curr.correctSteps > best.correctSteps ? curr : best;
+            },
+            null
+          );
+          if (bestEntry) {
+            winnerIds = entries
+              .filter(
+                ([, entry]) =>
+                  entry.completedRounds === bestEntry.completedRounds &&
+                  entry.correctSteps === bestEntry.correctSteps
+              )
+              .map(([pId]) => pId);
+            const roundLabel = bestEntry.completedRounds === 1 ? 'ronda' : 'rondas';
+            resultSummary = `Mejor marca: ${bestEntry.completedRounds} ${roundLabel} (${bestEntry.correctSteps} pasos)`;
+          }
+        } else {
+          resultSummary = 'Ningún jugador completó pasos del pipeline.';
         }
       }
 
@@ -1448,13 +1721,14 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         minigame: {
           ...prev.minigame,
           phase: 'results',
+          resultSummary,
           winnerPlayerId: winnerIds[0],
           winnerPlayerIds: winnerIds,
         },
         activeMessage:
           winnerNames.length > 0
             ? `🏆 ¡${winnerNames.join(' y ')} ganó el Minijuego (+2 Estrellas)!`
-            : '🏁 Minijuego finalizado sin puntuación.',
+            : resultSummary || '🏁 Minijuego finalizado sin puntuación.',
       };
     });
 
@@ -1528,6 +1802,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       targetRoulette: null,
       chaosEvent: null,
       bonusStarWheel: null,
+      lastMinigameType: undefined,
       activeMessage: 'Esperando a que los jugadores se unan con su móvil...',
     }));
   }, [updateAndBroadcastState]);
@@ -1644,12 +1919,28 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           submitPeajeCard(action.card);
         } else if (action.type === 'TRIGGER_MINIGAME') {
           triggerMinigame(action.minigameType, { advanceTurnOnClose: action.advanceTurnOnClose });
+        } else if (action.type === 'TRIGGER_MINIGAME_ROULETTE') {
+          triggerMinigameRoulette({ advanceTurnOnClose: action.advanceTurnOnClose });
+        } else if (action.type === 'FINISH_MINIGAME_ROULETTE') {
+          finishMinigameRoulette();
         } else if (action.type === 'CLOSE_MINIGAME_RESULTS') {
           closeMinigameResults();
         } else if (action.type === 'SUBMIT_MINIGAME_TAP') {
           submitMinigameTap(action.playerId, action.count ?? 1);
         } else if (action.type === 'SUBMIT_MINIGAME_VOTE') {
           submitMinigameVote(action.voterId, action.targetId);
+        } else if (action.type === 'SUBMIT_BLIND_TIMER') {
+          submitBlindTimer(action.playerId, action.elapsedMs);
+        } else if (action.type === 'SUBMIT_POKER_BID') {
+          submitPokerBid(action.playerId, action.cardValue);
+        } else if (action.type === 'SUBMIT_SIMON_PROGRESS') {
+          submitSimonProgress(
+            action.playerId,
+            action.completedRounds,
+            action.correctSteps,
+            action.failed,
+            action.finishedAtMs
+          );
         } else if (action.type === 'NEXT_TURN') {
           nextTurn();
         }
@@ -1672,9 +1963,14 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     submitRetroCard,
     submitPeajeCard,
     triggerMinigame,
+    triggerMinigameRoulette,
+    finishMinigameRoulette,
     closeMinigameResults,
     submitMinigameTap,
     submitMinigameVote,
+    submitBlindTimer,
+    submitPokerBid,
+    submitSimonProgress,
     nextTurn,
   ]);
 
@@ -1702,9 +1998,14 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         resolveChaosEvent,
         submitRetroCard,
         triggerMinigame,
+        triggerMinigameRoulette,
+        finishMinigameRoulette,
         startMinigamePlay,
         submitMinigameTap,
         submitMinigameVote,
+        submitBlindTimer,
+        submitPokerBid,
+        submitSimonProgress,
         finishMinigame,
         closeMinigameResults,
         enterPeaje,
