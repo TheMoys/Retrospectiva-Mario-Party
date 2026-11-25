@@ -1,7 +1,8 @@
-import React, { useEffect, useId, useRef } from 'react';
+import React, { useId, useRef } from 'react';
 import { Dices, Gamepad2, X, Clock } from 'lucide-react';
 import { useGame } from '@/context/GameContext';
 import { ALL_MINIGAME_TYPES, MINIGAME_CATALOG } from '@/constants/minigames';
+import { useDialogFocusTrap } from '@/hooks/useDialogFocusTrap';
 import { MinigameType } from '@/types/game';
 
 interface MinigamePickerModalProps {
@@ -14,41 +15,7 @@ export const MinigamePickerModal: React.FC<MinigamePickerModalProps> = ({ isOpen
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const previousFocus = document.activeElement as HTMLElement | null;
-    dialogRef.current?.focus();
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-        return;
-      }
-      if (e.key === 'Tab' && dialogRef.current) {
-        const focusable = Array.from(
-          dialogRef.current.querySelectorAll<HTMLElement>(
-            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-          )
-        );
-        if (focusable.length === 0) return;
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault();
-          last.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault();
-          first.focus();
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      previousFocus?.focus?.();
-    };
-  }, [isOpen, onClose]);
+  useDialogFocusTrap(dialogRef, isOpen, { restoreFocus: true, onEscape: onClose });
 
   if (!isOpen) return null;
 
@@ -74,7 +41,7 @@ export const MinigamePickerModal: React.FC<MinigamePickerModalProps> = ({ isOpen
       }}
       className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md overflow-y-auto flex flex-col items-center p-4 pb-20 md:p-6 select-none font-game focus:outline-none"
     >
-      <div className="my-auto w-full max-w-3xl rounded-3xl border-2 border-purple-400/60 bg-slate-900/95 p-4 sm:p-6 md:p-7 shadow-2xl animate-modal-spring motion-reduce:animate-none">
+      <div className="my-auto w-full max-w-4xl rounded-3xl border-2 border-purple-400/60 bg-slate-900/95 p-4 sm:p-6 md:p-7 shadow-2xl animate-modal-spring motion-reduce:animate-none">
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -94,7 +61,7 @@ export const MinigamePickerModal: React.FC<MinigamePickerModalProps> = ({ isOpen
             type="button"
             onClick={onClose}
             aria-label="Cerrar selector de minijuegos"
-            className="min-h-[44px] min-w-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-white/15 text-slate-200 flex items-center justify-center cursor-pointer transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
+            className="min-h-[44px] min-w-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-500 text-slate-200 flex items-center justify-center cursor-pointer transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
           >
             <X className="w-5 h-5" aria-hidden="true" />
           </button>
@@ -110,7 +77,7 @@ export const MinigamePickerModal: React.FC<MinigamePickerModalProps> = ({ isOpen
           <span>Girar Ruleta Aleatoria</span>
         </button>
 
-        {/* Catalog Grid of all 5 Minigames */}
+        {/* Catalog Grid of all 10 Minigames */}
         <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {ALL_MINIGAME_TYPES.map((type) => {
             const meta = MINIGAME_CATALOG[type];
@@ -122,7 +89,7 @@ export const MinigamePickerModal: React.FC<MinigamePickerModalProps> = ({ isOpen
                 key={type}
                 type="button"
                 onClick={() => handleSelectMinigame(type)}
-                className="min-h-[112px] p-4 rounded-2xl bg-slate-950/90 hover:bg-slate-800/90 border border-white/15 hover:border-amber-400/70 text-left flex flex-col justify-between gap-2.5 transition-all hover:-translate-y-0.5 active:scale-[0.99] motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+                className="min-h-[112px] p-4 rounded-2xl bg-slate-950/90 hover:bg-slate-800/90 border border-slate-500 hover:border-amber-400 text-left flex flex-col justify-between gap-2.5 transition-all hover:-translate-y-0.5 active:scale-[0.99] motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
               >
                 <div className="flex items-start justify-between gap-2 w-full">
                   <div className="flex items-center gap-2 min-w-0">

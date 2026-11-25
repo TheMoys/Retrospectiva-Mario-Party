@@ -11,6 +11,7 @@ import {
   MinigameState,
   ChaosEventType,
   BonusStarType,
+  CableColorId,
   Trap,
   ConnectionStatus,
   JoinStatus,
@@ -21,9 +22,15 @@ import { getRandomPowerUp } from '@/constants/powerUps';
 import {
   FIBONACCI_CARDS,
   MINIGAME_CATALOG,
+  computeMeetingPoints,
+  generateDefuseRounds,
   generatePipelineSequence,
+  generateRhythmNotes,
+  generateStroopPrompts,
+  getRandomPriceQuestion,
   getRandomVoteQuestion,
   pickBlindTargetMs,
+  pickMeetingCrashMs,
   pickRandomMinigame,
 } from '@/constants/minigames';
 import { sounds } from '@/audio/soundEffects';
@@ -73,6 +80,25 @@ interface GameContextType {
     failed: boolean,
     finishedAtMs?: number
   ) => void;
+  submitDefuseChoice: (playerId: string, roundIndex: number, cable: CableColorId) => void;
+  advanceDefuseRound: (mode: 'reveal' | 'next') => void;
+  submitMeetingExit: (playerId: string, elapsedMs: number) => void;
+  triggerMeetingCrash: () => void;
+  submitPriceGuess: (playerId: string, value: number) => void;
+  submitRhythmScore: (
+    playerId: string,
+    score: number,
+    hits: number,
+    maxCombo: number,
+    misses: number
+  ) => void;
+  submitStroopProgress: (
+    playerId: string,
+    correct: number,
+    wrong: number,
+    totalTimeMs: number,
+    finished: boolean
+  ) => void;
   finishMinigame: () => void;
   closeMinigameResults: () => void;
   enterPeaje: () => void;
@@ -118,7 +144,13 @@ function createMinigameState(
 ): MinigameState {
   const meta = MINIGAME_CATALOG[type];
   const targetMs = type === 'blind_timer' ? pickBlindTargetMs() : undefined;
-  const durationMs = type === 'blind_timer' ? (targetMs || 7000) + 6000 : meta.durationMs;
+  const meetingCrashAtMs = type === 'chicken_meeting' ? pickMeetingCrashMs() : undefined;
+  const durationMs =
+    type === 'blind_timer'
+      ? (targetMs || 7000) + 6000
+      : type === 'chicken_meeting'
+      ? (meetingCrashAtMs || 7000) + 2500
+      : meta.durationMs;
 
   return {
     active: true,
@@ -136,6 +168,19 @@ function createMinigameState(
     pokerBids: type === 'planning_poker' ? {} : undefined,
     pipelineSequence: type === 'simon_pipeline' ? generatePipelineSequence(10) : undefined,
     simonEntries: type === 'simon_pipeline' ? {} : undefined,
+    defuseRounds: type === 'defuse_p0' ? generateDefuseRounds(3) : undefined,
+    defuseRoundIndex: type === 'defuse_p0' ? 0 : undefined,
+    defuseRoundRevealing: type === 'defuse_p0' ? false : undefined,
+    defuseChoices: type === 'defuse_p0' ? {} : undefined,
+    meetingCrashAtMs,
+    meetingCrashed: type === 'chicken_meeting' ? false : undefined,
+    meetingExits: type === 'chicken_meeting' ? {} : undefined,
+    priceQuestion: type === 'dev_price_is_right' ? getRandomPriceQuestion() : undefined,
+    priceGuesses: type === 'dev_price_is_right' ? {} : undefined,
+    rhythmNotes: type === 'sprint_rhythm' ? generateRhythmNotes() : undefined,
+    rhythmEntries: type === 'sprint_rhythm' ? {} : undefined,
+    stroopPrompts: type === 'stroop_bug' ? generateStroopPrompts(6) : undefined,
+    stroopEntries: type === 'stroop_bug' ? {} : undefined,
     advanceTurnOnClose: Boolean(options?.advanceTurnOnClose),
   };
 }
@@ -1413,9 +1458,12 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     updateAndBroadcastState((prev) => {
       if (!prev.minigame) return prev;
       const meta = MINIGAME_CATALOG[prev.minigame.type];
+      const now = Date.now();
       const duration =
         prev.minigame.type === 'blind_timer'
           ? (prev.minigame.targetMs || 7000) + 6000
+          : prev.minigame.type === 'chicken_meeting'
+          ? (prev.minigame.meetingCrashAtMs || 7000) + 2500
           : meta.durationMs;
       return {
         ...prev,
@@ -1423,7 +1471,16 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ...prev.minigame,
           phase: 'playing',
           countdown: Math.ceil(duration / 1000),
-          endsAt: Date.now() + duration,
+          endsAt: now + duration,
+          defuseRoundIndex: prev.minigame.type === 'defuse_p0' ? 0 : prev.minigame.defuseRoundIndex,
+          defuseRoundRevealing:
+            prev.minigame.type === 'defuse_p0' ? false : prev.minigame.defuseRoundRevealing,
+          defuseRoundEndsAt:
+            prev.minigame.type === 'defuse_p0' ? now + 8000 : prev.minigame.defuseRoundEndsAt,
+          meetingStartedAt:
+            prev.minigame.type === 'chicken_meeting' ? now : prev.minigame.meetingStartedAt,
+          meetingCrashed:
+            prev.minigame.type === 'chicken_meeting' ? false : prev.minigame.meetingCrashed,
         },
       };
     });
@@ -1608,6 +1665,302 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [updateAndBroadcastState]
   );
 
+  const submitDefuseChoice = useCallback(
+    (playerId: string, roundIndex: number, cable: CableColorId) => {
+      sounds.playCoin();
+      if (!network.isHost) {
+        network.sendToHost({ type: 'SUBMIT_DEFUSE_CHOICE', playerId, roundIndex, cable });
+        return;
+      }
+
+      updateAndBroadcastState((prev) => {
+        if (
+          !prev.minigame ||
+          prev.minigame.type !== 'defuse_p0' ||
+          prev.minigame.phase !== 'playing' ||
+          prev.minigame.defuseRoundRevealing
+        ) {
+          return prev;
+        }
+        const activeIdx = prev.minigame.defuseRoundIndex ?? 0;
+        if (roundIndex !== activeIdx) return prev;
+
+        const existingMap = prev.minigame.defuseChoices?.[playerId] || {};
+        if (existingMap[roundIndex] !== undefined) return prev;
+
+        return {
+          ...prev,
+          minigame: {
+            ...prev.minigame,
+            defuseChoices: {
+              ...(prev.minigame.defuseChoices || {}),
+              [playerId]: {
+                ...existingMap,
+                [roundIndex]: cable,
+              },
+            },
+          },
+        };
+      });
+    },
+    [updateAndBroadcastState]
+  );
+
+  const advanceDefuseRound = useCallback(
+    (mode: 'reveal' | 'next') => {
+      if (!network.isHost) return;
+
+      updateAndBroadcastState((prev) => {
+        if (!prev.minigame || prev.minigame.type !== 'defuse_p0' || prev.minigame.phase !== 'playing') {
+          return prev;
+        }
+        if (mode === 'reveal') {
+          if (prev.minigame.defuseRoundRevealing) return prev;
+          return {
+            ...prev,
+            minigame: {
+              ...prev.minigame,
+              defuseRoundRevealing: true,
+            },
+          };
+        }
+
+        const totalRounds = prev.minigame.defuseRounds?.length || 3;
+        const currIdx = prev.minigame.defuseRoundIndex ?? 0;
+        const nextIdx = Math.min(totalRounds - 1, currIdx + 1);
+        return {
+          ...prev,
+          minigame: {
+            ...prev.minigame,
+            defuseRoundIndex: nextIdx,
+            defuseRoundRevealing: false,
+            defuseRoundEndsAt: Date.now() + 8000,
+          },
+        };
+      });
+    },
+    [updateAndBroadcastState]
+  );
+
+  const submitMeetingExit = useCallback(
+    (playerId: string, elapsedMs: number) => {
+      const clampedMs = Math.max(0, Math.round(elapsedMs));
+      if (!network.isHost) {
+        sounds.playJump();
+        network.sendToHost({ type: 'SUBMIT_MEETING_EXIT', playerId, elapsedMs: clampedMs });
+        return;
+      }
+
+      updateAndBroadcastState((prev) => {
+        if (
+          !prev.minigame ||
+          prev.minigame.type !== 'chicken_meeting' ||
+          prev.minigame.phase !== 'playing'
+        ) {
+          return prev;
+        }
+        if (prev.minigame.meetingExits?.[playerId]) return prev;
+
+        const crashAt = prev.minigame.meetingCrashAtMs || 7000;
+        const safe = !prev.minigame.meetingCrashed && clampedMs < crashAt;
+        if (safe) {
+          sounds.playCoin();
+        } else {
+          sounds.playSlip();
+        }
+
+        return {
+          ...prev,
+          minigame: {
+            ...prev.minigame,
+            meetingExits: {
+              ...(prev.minigame.meetingExits || {}),
+              [playerId]: safe
+                ? {
+                    exitedAtMs: clampedMs,
+                    points: computeMeetingPoints(clampedMs),
+                    crashed: false,
+                  }
+                : {
+                    exitedAtMs: crashAt,
+                    points: 0,
+                    crashed: true,
+                  },
+            },
+          },
+        };
+      });
+    },
+    [updateAndBroadcastState]
+  );
+
+  const triggerMeetingCrash = useCallback(() => {
+    if (!network.isHost) return;
+    sounds.playSlip();
+
+    updateAndBroadcastState((prev) => {
+      if (
+        !prev.minigame ||
+        prev.minigame.type !== 'chicken_meeting' ||
+        prev.minigame.phase !== 'playing' ||
+        prev.minigame.meetingCrashed
+      ) {
+        return prev;
+      }
+      const crashAt = prev.minigame.meetingCrashAtMs || 7000;
+      const nextExits = { ...(prev.minigame.meetingExits || {}) };
+      prev.players.forEach((p) => {
+        if (!nextExits[p.id]) {
+          nextExits[p.id] = {
+            exitedAtMs: crashAt,
+            points: 0,
+            crashed: true,
+          };
+        }
+      });
+
+      return {
+        ...prev,
+        minigame: {
+          ...prev.minigame,
+          meetingCrashed: true,
+          meetingExits: nextExits,
+        },
+      };
+    });
+  }, [updateAndBroadcastState]);
+
+  const submitPriceGuess = useCallback(
+    (playerId: string, value: number) => {
+      sounds.playCoin();
+      if (!network.isHost) {
+        network.sendToHost({ type: 'SUBMIT_PRICE_GUESS', playerId, value });
+        return;
+      }
+
+      updateAndBroadcastState((prev) => {
+        if (
+          !prev.minigame ||
+          prev.minigame.type !== 'dev_price_is_right' ||
+          prev.minigame.phase !== 'playing' ||
+          !prev.minigame.priceQuestion
+        ) {
+          return prev;
+        }
+        if (prev.minigame.priceGuesses?.[playerId] !== undefined) return prev;
+
+        const { min, max } = prev.minigame.priceQuestion;
+        const clampedVal = Math.max(min, Math.min(max, Math.round(value)));
+
+        return {
+          ...prev,
+          minigame: {
+            ...prev.minigame,
+            priceGuesses: {
+              ...(prev.minigame.priceGuesses || {}),
+              [playerId]: clampedVal,
+            },
+          },
+        };
+      });
+    },
+    [updateAndBroadcastState]
+  );
+
+  const submitRhythmScore = useCallback(
+    (playerId: string, score: number, hits: number, maxCombo: number, misses: number) => {
+      if (!network.isHost) {
+        network.sendToHost({
+          type: 'SUBMIT_RHYTHM_SCORE',
+          playerId,
+          score,
+          hits,
+          maxCombo,
+          misses,
+        });
+        return;
+      }
+
+      updateAndBroadcastState((prev) => {
+        if (
+          !prev.minigame ||
+          prev.minigame.type !== 'sprint_rhythm' ||
+          prev.minigame.phase !== 'playing'
+        ) {
+          return prev;
+        }
+        const prevEntry = prev.minigame.rhythmEntries?.[playerId];
+        if (prevEntry && score < prevEntry.score && hits < prevEntry.hits) {
+          return prev;
+        }
+        return {
+          ...prev,
+          minigame: {
+            ...prev.minigame,
+            rhythmEntries: {
+              ...(prev.minigame.rhythmEntries || {}),
+              [playerId]: {
+                score: Math.max(0, Math.round(score)),
+                hits: Math.max(0, hits),
+                maxCombo: Math.max(0, maxCombo),
+                misses: Math.max(0, misses),
+              },
+            },
+          },
+        };
+      });
+    },
+    [updateAndBroadcastState]
+  );
+
+  const submitStroopProgress = useCallback(
+    (playerId: string, correct: number, wrong: number, totalTimeMs: number, finished: boolean) => {
+      if (!network.isHost) {
+        network.sendToHost({
+          type: 'SUBMIT_STROOP_PROGRESS',
+          playerId,
+          correct,
+          wrong,
+          totalTimeMs,
+          finished,
+        });
+        return;
+      }
+
+      updateAndBroadcastState((prev) => {
+        if (
+          !prev.minigame ||
+          prev.minigame.type !== 'stroop_bug' ||
+          prev.minigame.phase !== 'playing'
+        ) {
+          return prev;
+        }
+        const prevEntry = prev.minigame.stroopEntries?.[playerId];
+        if (prevEntry) {
+          if (prevEntry.finished && !finished) return prev;
+          if (correct < prevEntry.correct && !finished) return prev;
+        }
+
+        return {
+          ...prev,
+          minigame: {
+            ...prev.minigame,
+            stroopEntries: {
+              ...(prev.minigame.stroopEntries || {}),
+              [playerId]: {
+                correct: Math.max(0, correct),
+                wrong: Math.max(0, wrong),
+                totalTimeMs: Math.max(0, Math.round(totalTimeMs)),
+                finished,
+              },
+            },
+          },
+        };
+      });
+    },
+    [updateAndBroadcastState]
+  );
+
   const finishMinigame = useCallback(() => {
     // Only Host resolves minigames authoritatively to avoid controller race desyncs
     if (!network.isHost) return;
@@ -1702,6 +2055,105 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         } else {
           resultSummary = 'Ningún jugador completó pasos del pipeline.';
+        }
+      } else if (mg.type === 'defuse_p0') {
+        const rounds = mg.defuseRounds || [];
+        const choices = mg.defuseChoices || {};
+        const totals: Record<string, number> = {};
+        prev.players.forEach((p) => {
+          let sum = 0;
+          rounds.forEach((roundCfg, rIdx) => {
+            const picked = choices[p.id]?.[rIdx];
+            if (picked) {
+              sum += roundCfg.pointsByCable[picked] || 0;
+            }
+          });
+          totals[p.id] = sum;
+        });
+        const maxTotal = Object.values(totals).reduce((mx, v) => Math.max(mx, v), 0);
+        if (maxTotal > 0) {
+          winnerIds = Object.entries(totals)
+            .filter(([, v]) => v === maxTotal)
+            .map(([pId]) => pId);
+          resultSummary = `Mejor puntuación acumulada: ${maxTotal} pts en ${rounds.length} rondas`;
+        } else {
+          resultSummary = 'Ningún jugador acumuló puntos sin detonar P0.';
+        }
+      } else if (mg.type === 'chicken_meeting') {
+        const exits = Object.entries(mg.meetingExits || {});
+        const safe = exits.filter(([, entry]) => !entry.crashed && entry.points > 0);
+        if (safe.length > 0) {
+          const maxPts = safe.reduce((mx, [, entry]) => Math.max(mx, entry.points), 0);
+          winnerIds = safe.filter(([, entry]) => entry.points === maxPts).map(([pId]) => pId);
+          resultSummary = `Escaparon a salvo: ${safe.length}/${prev.players.length} · Bote ganador: ${maxPts} pts`;
+        } else {
+          winnerIds = [];
+          resultSummary = '💥 ¡Llegó un cambio del cliente! Todos quedaron atrapados con 0 pts.';
+        }
+      } else if (mg.type === 'dev_price_is_right') {
+        const q = mg.priceQuestion;
+        const guesses = Object.entries(mg.priceGuesses || {});
+        if (q && guesses.length > 0) {
+          const unitSuffix = q.unit ? ` ${q.unit}` : '';
+          const validUnder = guesses.filter(([, val]) => val <= q.answer);
+          if (validUnder.length > 0) {
+            const bestVal = validUnder.reduce((mx, [, val]) => Math.max(mx, val), -Infinity);
+            winnerIds = validUnder.filter(([, val]) => val === bestVal).map(([pId]) => pId);
+            resultSummary = `Respuesta exacta: ${q.answer}${unitSuffix} · Mejor sin pasarse: ${bestVal}${unitSuffix}`;
+          } else {
+            const minDiff = guesses.reduce(
+              (mn, [, val]) => Math.min(mn, Math.abs(val - q.answer)),
+              Infinity
+            );
+            winnerIds = guesses
+              .filter(([, val]) => Math.abs(val - q.answer) === minDiff)
+              .map(([pId]) => pId);
+            resultSummary = `Respuesta exacta: ${q.answer}${unitSuffix} · Todos se pasaron (gana el más cercano)`;
+          }
+        } else {
+          resultSummary = q
+            ? `Respuesta exacta: ${q.answer}${q.unit ? ` ${q.unit}` : ''} · Sin estimaciones.`
+            : 'Sin estimaciones registradas.';
+        }
+      } else if (mg.type === 'sprint_rhythm') {
+        const entries = Object.entries(mg.rhythmEntries || {}).filter(([, e]) => e.score > 0);
+        if (entries.length > 0) {
+          const best = entries.reduce<{ score: number; maxCombo: number } | null>(
+            (acc, [, curr]) => {
+              if (!acc) return curr;
+              if (curr.score !== acc.score) return curr.score > acc.score ? curr : acc;
+              return curr.maxCombo > acc.maxCombo ? curr : acc;
+            },
+            null
+          );
+          if (best) {
+            winnerIds = entries
+              .filter(([, e]) => e.score === best.score && e.maxCombo === best.maxCombo)
+              .map(([pId]) => pId);
+            resultSummary = `Mejor puntuación: ${best.score} pts (Combo x${best.maxCombo})`;
+          }
+        } else {
+          resultSummary = 'Ningún jugador acertó notas en esta pista.';
+        }
+      } else if (mg.type === 'stroop_bug') {
+        const entries = Object.entries(mg.stroopEntries || {}).filter(([, e]) => e.correct > 0);
+        if (entries.length > 0) {
+          const best = entries.reduce<{ correct: number; totalTimeMs: number } | null>(
+            (acc, [, curr]) => {
+              if (!acc) return curr;
+              if (curr.correct !== acc.correct) return curr.correct > acc.correct ? curr : acc;
+              return curr.totalTimeMs < acc.totalTimeMs ? curr : acc;
+            },
+            null
+          );
+          if (best) {
+            winnerIds = entries
+              .filter(([, e]) => e.correct === best.correct && e.totalTimeMs === best.totalTimeMs)
+              .map(([pId]) => pId);
+            resultSummary = `Mejor marca: ${best.correct}/6 aciertos (${(best.totalTimeMs / 1000).toFixed(2)} s)`;
+          }
+        } else {
+          resultSummary = 'Ningún jugador sumó aciertos en El Bug de Color.';
         }
       }
 
@@ -1941,6 +2393,28 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             action.failed,
             action.finishedAtMs
           );
+        } else if (action.type === 'SUBMIT_DEFUSE_CHOICE') {
+          submitDefuseChoice(action.playerId, action.roundIndex, action.cable);
+        } else if (action.type === 'SUBMIT_MEETING_EXIT') {
+          submitMeetingExit(action.playerId, action.elapsedMs);
+        } else if (action.type === 'SUBMIT_PRICE_GUESS') {
+          submitPriceGuess(action.playerId, action.value);
+        } else if (action.type === 'SUBMIT_RHYTHM_SCORE') {
+          submitRhythmScore(
+            action.playerId,
+            action.score,
+            action.hits,
+            action.maxCombo,
+            action.misses
+          );
+        } else if (action.type === 'SUBMIT_STROOP_PROGRESS') {
+          submitStroopProgress(
+            action.playerId,
+            action.correct,
+            action.wrong,
+            action.totalTimeMs,
+            action.finished
+          );
         } else if (action.type === 'NEXT_TURN') {
           nextTurn();
         }
@@ -1971,6 +2445,11 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     submitBlindTimer,
     submitPokerBid,
     submitSimonProgress,
+    submitDefuseChoice,
+    submitMeetingExit,
+    submitPriceGuess,
+    submitRhythmScore,
+    submitStroopProgress,
     nextTurn,
   ]);
 
@@ -2006,6 +2485,13 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         submitBlindTimer,
         submitPokerBid,
         submitSimonProgress,
+        submitDefuseChoice,
+        advanceDefuseRound,
+        submitMeetingExit,
+        triggerMeetingCrash,
+        submitPriceGuess,
+        submitRhythmScore,
+        submitStroopProgress,
         finishMinigame,
         closeMinigameResults,
         enterPeaje,

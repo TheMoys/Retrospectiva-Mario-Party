@@ -127,17 +127,122 @@ export const MinigameResultsOverlay: React.FC<MinigameResultsOverlayProps> = ({
       };
     }
 
-    // simon_pipeline
-    const simon = minigame.simonEntries?.[player.id];
-    const rounds = simon?.completedRounds || 0;
-    const steps = simon?.correctSteps || 0;
-    const roundWord = rounds === 1 ? 'ronda' : 'rondas';
+    if (minigame.type === 'simon_pipeline') {
+      const simon = minigame.simonEntries?.[player.id];
+      const rounds = simon?.completedRounds || 0;
+      const steps = simon?.correctSteps || 0;
+      const roundWord = rounds === 1 ? 'ronda' : 'rondas';
+      return {
+        player,
+        primaryScore: `${rounds} ${roundWord}`,
+        secondaryDetail: simon?.failed ? `${steps} pasos · 💥 Fallo` : `${steps} pasos`,
+        isWinner,
+        sortRank: rounds * 1000 + steps,
+        sortSecondary: player.stars,
+      };
+    }
+
+    if (minigame.type === 'defuse_p0') {
+      const rounds = minigame.defuseRounds || [];
+      let totalPts = 0;
+      let bombsHit = 0;
+      rounds.forEach((cfg, idx) => {
+        const picked = minigame.defuseChoices?.[player.id]?.[idx];
+        if (picked) {
+          const pts = cfg.pointsByCable[picked] || 0;
+          totalPts += pts;
+          if (pts === 0) bombsHit += 1;
+        }
+      });
+      return {
+        player,
+        primaryScore: `${totalPts} pts`,
+        secondaryDetail: bombsHit > 0 ? `💥 ${bombsHit} P0` : '✅ Ileso',
+        isWinner,
+        sortRank: totalPts,
+        sortSecondary: player.stars,
+      };
+    }
+
+    if (minigame.type === 'chicken_meeting') {
+      const exit = minigame.meetingExits?.[player.id];
+      if (!exit) {
+        return {
+          player,
+          primaryScore: '0 pts',
+          secondaryDetail: 'Sin salida',
+          isWinner: false,
+          sortRank: -1,
+          sortSecondary: player.stars,
+        };
+      }
+      return {
+        player,
+        primaryScore: `${exit.points} pts`,
+        secondaryDetail: exit.crashed
+          ? '💥 Atrapado'
+          : `🚪 ${(exit.exitedAtMs / 1000).toFixed(2)}s`,
+        isWinner,
+        sortRank: exit.crashed ? 0 : exit.points,
+        sortSecondary: player.stars,
+      };
+    }
+
+    if (minigame.type === 'dev_price_is_right') {
+      const guess = minigame.priceGuesses?.[player.id];
+      const q = minigame.priceQuestion;
+      if (guess === undefined || !q) {
+        return {
+          player,
+          primaryScore: '--',
+          secondaryDetail: 'Sin envío',
+          isWinner: false,
+          sortRank: -10000000,
+          sortSecondary: player.stars,
+        };
+      }
+      const diff = guess - q.answer;
+      const busted = diff > 0;
+      const unitSuffix = q.unit ? ` ${q.unit}` : '';
+      return {
+        player,
+        primaryScore: `${guess}${unitSuffix}`,
+        secondaryDetail: busted
+          ? `Se pasó (+${diff})`
+          : diff === 0
+          ? '🎯 Exacto'
+          : `-${Math.abs(diff)} debajo`,
+        isWinner,
+        sortRank: busted ? -1000000 - diff : 1000000 + guess,
+        sortSecondary: player.stars,
+      };
+    }
+
+    if (minigame.type === 'sprint_rhythm') {
+      const entry = minigame.rhythmEntries?.[player.id];
+      const pScore = entry?.score || 0;
+      const pHits = entry?.hits || 0;
+      const pCombo = entry?.maxCombo || 0;
+      return {
+        player,
+        primaryScore: `${pScore} pts`,
+        secondaryDetail: `${pHits} notas · x${pCombo}`,
+        isWinner,
+        sortRank: pScore * 100 + pCombo,
+        sortSecondary: player.stars,
+      };
+    }
+
+    // stroop_bug
+    const stroop = minigame.stroopEntries?.[player.id];
+    const sCorrect = stroop?.correct || 0;
+    const sTime = stroop?.totalTimeMs || 99999;
     return {
       player,
-      primaryScore: `${rounds} ${roundWord}`,
-      secondaryDetail: simon?.failed ? `${steps} pasos · 💥 Fallo` : `${steps} pasos`,
+      primaryScore: `${sCorrect}/6`,
+      secondaryDetail: stroop?.finished ? `${(sTime / 1000).toFixed(2)}s` : `${stroop?.wrong || 0} fallos`,
       isWinner,
-      sortRank: rounds * 1000 + steps,
+      sortRank: sCorrect * 100000 - sTime,
       sortSecondary: player.stars,
     };
   };
@@ -169,10 +274,12 @@ export const MinigameResultsOverlay: React.FC<MinigameResultsOverlayProps> = ({
           {noWinner ? (
             <>
               <div className="text-4xl mb-2" aria-hidden="true">
-                {minigame.type === 'planning_poker' ? '💥' : '🤝'}
+                {minigame.type === 'planning_poker' || minigame.type === 'chicken_meeting' ? '💥' : '🤝'}
               </div>
               <h2 id={titleId} className="text-2xl font-black text-white break-words max-w-full">
-                {minigame.type === 'planning_poker' ? 'Sin ganador' : 'Sin puntuación'}
+                {minigame.type === 'planning_poker' || minigame.type === 'chicken_meeting'
+                  ? 'Sin ganador'
+                  : 'Sin puntuación'}
               </h2>
               <p className="text-xs text-slate-300 mt-1">
                 {minigame.resultSummary || 'Nadie sumó puntos en esta ronda.'}
@@ -302,7 +409,9 @@ export const MinigameResultsOverlay: React.FC<MinigameResultsOverlayProps> = ({
               {minigame.type === 'planning_poker' ? '💥' : '🤝'}
             </div>
             <h2 id={titleId} className="text-3xl md:text-4xl font-black text-white">
-              {minigame.type === 'planning_poker' ? 'Ronda sin ganador' : 'Ronda sin puntuación'}
+              {minigame.type === 'planning_poker' || minigame.type === 'chicken_meeting'
+                ? 'Ronda sin ganador'
+                : 'Ronda sin puntuación'}
             </h2>
             <p className="text-sm text-slate-200 mt-2 max-w-md mx-auto">
               {minigame.resultSummary || 'Ningún jugador registró puntuación en esta ocasión.'}

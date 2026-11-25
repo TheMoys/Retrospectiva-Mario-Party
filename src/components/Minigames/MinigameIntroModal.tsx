@@ -80,6 +80,75 @@ const PHONE_PREVIEWS: Record<MinigameType, React.ReactNode> = {
       <span className="text-xs font-black text-pink-300 mt-2 text-center">REPITE</span>
     </div>
   ),
+  defuse_p0: (
+    <div className="relative w-28 h-44 rounded-2xl border-4 border-slate-700 bg-slate-950 p-2 flex flex-col items-center justify-center shadow-2xl">
+      <div className="grid grid-cols-2 gap-1.5 w-full">
+        <div className="h-9 rounded-lg bg-rose-950 border border-rose-400 flex items-center justify-center text-xs font-black text-rose-100">
+          🔴
+        </div>
+        <div className="h-9 rounded-lg bg-sky-950 border border-sky-400 flex items-center justify-center text-xs font-black text-sky-100">
+          🔵
+        </div>
+        <div className="h-9 rounded-lg bg-emerald-950 border-2 border-emerald-300 flex items-center justify-center text-xs font-black text-emerald-100">
+          🟢
+        </div>
+        <div className="h-9 rounded-lg bg-amber-950 border border-amber-400 flex items-center justify-center text-xs font-black text-amber-100">
+          🟡
+        </div>
+      </div>
+      <span className="text-xs font-black text-rose-300 mt-2 text-center">CORTA</span>
+    </div>
+  ),
+  chicken_meeting: (
+    <div className="relative w-28 h-44 rounded-2xl border-4 border-slate-700 bg-slate-950 p-2 flex flex-col items-center justify-center gap-2 shadow-2xl">
+      <div className="px-2 py-1 rounded-lg bg-slate-900 border border-teal-400/50 font-mono text-xs font-black text-yellow-300">
+        +180 pts
+      </div>
+      <div className="w-16 h-12 rounded-xl bg-emerald-700 border-2 border-emerald-300 flex items-center justify-center text-lg shadow-lg">
+        🚪
+      </div>
+      <span className="text-xs font-black text-teal-300 text-center">¡SALIR!</span>
+    </div>
+  ),
+  dev_price_is_right: (
+    <div className="relative w-28 h-44 rounded-2xl border-4 border-slate-700 bg-slate-950 p-2 flex flex-col items-center justify-center gap-2 shadow-2xl">
+      <div className="font-mono text-base font-black text-yellow-300">2005</div>
+      <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+        <div className="w-2/3 h-full bg-amber-400" />
+      </div>
+      <div className="px-2.5 py-1 rounded-lg bg-amber-400 text-slate-950 text-xs font-black">
+        ENVIAR
+      </div>
+    </div>
+  ),
+  sprint_rhythm: (
+    <div className="relative w-28 h-44 rounded-2xl border-4 border-slate-700 bg-slate-950 p-2 flex flex-col items-center justify-between py-3 shadow-2xl">
+      <div className="grid grid-cols-3 gap-1 w-full flex-1 items-center">
+        <div className="h-3 rounded-full bg-cyan-400" />
+        <div className="h-3 rounded-full bg-transparent" />
+        <div className="h-3 rounded-full bg-amber-400" />
+      </div>
+      <div className="w-full h-0.5 bg-yellow-300 my-1" />
+      <div className="grid grid-cols-3 gap-1 w-full text-xs font-black text-white text-center">
+        <span className="py-1 rounded bg-cyan-900 border border-cyan-400">◀</span>
+        <span className="py-1 rounded bg-emerald-900 border border-emerald-400">●</span>
+        <span className="py-1 rounded bg-amber-900 border border-amber-400">▶</span>
+      </div>
+    </div>
+  ),
+  stroop_bug: (
+    <div className="relative w-28 h-44 rounded-2xl border-4 border-slate-700 bg-slate-950 p-2 flex flex-col items-center justify-center gap-2 shadow-2xl">
+      <div className="px-2 py-1 rounded bg-slate-900 border border-white/15 text-xs font-black text-sky-400">
+        ROJO
+      </div>
+      <div className="grid grid-cols-2 gap-1 w-full">
+        <div className="h-7 rounded bg-rose-700 border border-rose-300" />
+        <div className="h-7 rounded bg-blue-700 border border-sky-300" />
+        <div className="h-7 rounded bg-emerald-700 border border-emerald-300" />
+        <div className="h-7 rounded bg-yellow-400 border border-yellow-100" />
+      </div>
+    </div>
+  ),
 };
 
 interface MinigameIntroModalProps {

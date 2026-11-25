@@ -86,11 +86,70 @@ export type MinigameType =
   | 'quick_vote'
   | 'blind_timer'
   | 'planning_poker'
-  | 'simon_pipeline';
+  | 'simon_pipeline'
+  | 'defuse_p0'
+  | 'chicken_meeting'
+  | 'dev_price_is_right'
+  | 'sprint_rhythm'
+  | 'stroop_bug';
 
 export type MinigamePhase = 'roulette' | 'instructions' | 'countdown' | 'playing' | 'results';
 
 export type PipelineStepId = 'code' | 'test' | 'deploy' | 'hotfix';
+
+export type CableColorId = 'red' | 'blue' | 'green' | 'yellow';
+
+export interface DefuseRoundConfig {
+  bombCable: CableColorId;
+  pointsByCable: Record<CableColorId, number>;
+}
+
+export interface MeetingExitEntry {
+  exitedAtMs: number;
+  points: number;
+  crashed: boolean;
+}
+
+export interface PriceIsRightQuestion {
+  id: string;
+  question: string;
+  answer: number;
+  min: number;
+  max: number;
+  step: number;
+  unit?: string;
+}
+
+export type RhythmLane = 0 | 1 | 2;
+
+export interface RhythmNote {
+  id: number;
+  lane: RhythmLane;
+  timeMs: number;
+  freq: number;
+}
+
+export interface RhythmEntry {
+  score: number;
+  hits: number;
+  maxCombo: number;
+  misses: number;
+}
+
+export type StroopColorId = 'red' | 'blue' | 'green' | 'yellow';
+
+export interface StroopPrompt {
+  wordColor: StroopColorId;
+  inkColor: StroopColorId;
+  rule: 'ink' | 'word';
+}
+
+export interface StroopEntry {
+  correct: number;
+  wrong: number;
+  totalTimeMs: number;
+  finished: boolean;
+}
 
 export interface BlindTimerEntry {
   elapsedMs: number;
@@ -120,6 +179,21 @@ export interface MinigameState {
   pokerBids?: Record<string, number>;
   pipelineSequence?: PipelineStepId[];
   simonEntries?: Record<string, SimonPipelineEntry>;
+  defuseRounds?: DefuseRoundConfig[];
+  defuseRoundIndex?: number;
+  defuseRoundRevealing?: boolean;
+  defuseRoundEndsAt?: number;
+  defuseChoices?: Record<string, Partial<Record<number, CableColorId>>>;
+  meetingCrashAtMs?: number;
+  meetingStartedAt?: number;
+  meetingCrashed?: boolean;
+  meetingExits?: Record<string, MeetingExitEntry>;
+  priceQuestion?: PriceIsRightQuestion;
+  priceGuesses?: Record<string, number>;
+  rhythmNotes?: RhythmNote[];
+  rhythmEntries?: Record<string, RhythmEntry>;
+  stroopPrompts?: StroopPrompt[];
+  stroopEntries?: Record<string, StroopEntry>;
   resultSummary?: string;
   winnerPlayerId?: string;
   winnerPlayerIds?: string[];
@@ -241,6 +315,25 @@ export type NetworkAction =
       correctSteps: number;
       failed: boolean;
       finishedAtMs?: number;
+    }
+  | { type: 'SUBMIT_DEFUSE_CHOICE'; playerId: string; roundIndex: number; cable: CableColorId }
+  | { type: 'SUBMIT_MEETING_EXIT'; playerId: string; elapsedMs: number }
+  | { type: 'SUBMIT_PRICE_GUESS'; playerId: string; value: number }
+  | {
+      type: 'SUBMIT_RHYTHM_SCORE';
+      playerId: string;
+      score: number;
+      hits: number;
+      maxCombo: number;
+      misses: number;
+    }
+  | {
+      type: 'SUBMIT_STROOP_PROGRESS';
+      playerId: string;
+      correct: number;
+      wrong: number;
+      totalTimeMs: number;
+      finished: boolean;
     }
   | { type: 'NEXT_TURN' }
   | { type: 'TRIGGER_MINIGAME'; minigameType: MinigameType; advanceTurnOnClose?: boolean }

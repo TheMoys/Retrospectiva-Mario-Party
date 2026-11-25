@@ -2,6 +2,7 @@ import React, { useEffect, useId, useRef, useState } from 'react';
 import { Dices, Play, Sparkles } from 'lucide-react';
 import { useGame } from '@/context/GameContext';
 import { ALL_MINIGAME_TYPES, MINIGAME_CATALOG } from '@/constants/minigames';
+import { useDialogFocusTrap } from '@/hooks/useDialogFocusTrap';
 import { sounds } from '@/audio/soundEffects';
 
 interface MinigameRouletteModalProps {
@@ -16,6 +17,9 @@ export const MinigameRouletteModal: React.FC<MinigameRouletteModalProps> = ({
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
+  const isDialogActive = phase === 'minigame' && minigame?.phase === 'roulette';
+  useDialogFocusTrap(dialogRef, isDialogActive);
+
   const targetType = minigame?.type || 'block_smash';
   const targetIndex = Math.max(0, ALL_MINIGAME_TYPES.indexOf(targetType));
 
@@ -23,9 +27,7 @@ export const MinigameRouletteModal: React.FC<MinigameRouletteModalProps> = ({
   const [landed, setLanded] = useState<boolean>(false);
 
   useEffect(() => {
-    if (phase !== 'minigame' || minigame?.phase !== 'roulette') return;
-
-    dialogRef.current?.focus();
+    if (!isDialogActive) return;
 
     const prefersReduced =
       typeof window !== 'undefined' &&
@@ -40,8 +42,8 @@ export const MinigameRouletteModal: React.FC<MinigameRouletteModalProps> = ({
 
     setLanded(false);
 
-    // Build a 14-step decelerating spin that deterministically lands on targetIndex
-    const totalSteps = 14;
+    // Build an 18-step decelerating spin that deterministically lands on targetIndex
+    const totalSteps = 18;
     const totalCount = ALL_MINIGAME_TYPES.length;
     const startIdx = (targetIndex - (totalSteps % totalCount) + totalCount) % totalCount;
 
@@ -50,7 +52,7 @@ export const MinigameRouletteModal: React.FC<MinigameRouletteModalProps> = ({
 
     for (let step = 1; step <= totalSteps; step++) {
       const progress = step / totalSteps;
-      const delayMs = progress < 0.5 ? 75 : progress < 0.8 ? 130 : 210;
+      const delayMs = progress < 0.55 ? 60 : progress < 0.85 ? 110 : 185;
       accumulatedMs += delayMs;
       const idx = (startIdx + step) % totalCount;
       const isFinalStep = step === totalSteps;
@@ -161,20 +163,22 @@ export const MinigameRouletteModal: React.FC<MinigameRouletteModalProps> = ({
           {landed ? selectedMeta.subtitle : 'El destino elegirá el próximo reto de +2 Estrellas'}
         </p>
 
-        {/* All 5 Minigames Roulette Grid */}
-        <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+        {/* All 10 Minigames Roulette Grid (5 columns desktop, 2 columns mobile = symmetric 2x5 / 5x2) */}
+        <div className="mt-5 grid grid-cols-2 sm:grid-cols-5 gap-2.5">
           {ALL_MINIGAME_TYPES.map((type, idx) => {
             const meta = MINIGAME_CATALOG[type];
             const isHighlighted = idx === highlightIndex;
             const isWinnerLocked = landed && isHighlighted;
+            const hasOddOrphanOnMobile =
+              ALL_MINIGAME_TYPES.length % 2 === 1 && idx === ALL_MINIGAME_TYPES.length - 1;
 
             return (
               <div
                 key={type}
                 data-minigame-card={type}
                 data-highlighted={isHighlighted ? 'true' : 'false'}
-                className={`rounded-2xl border-2 p-3.5 flex flex-col items-center justify-center text-center transition-all duration-150 motion-reduce:transition-none motion-reduce:scale-100 ${
-                  idx === ALL_MINIGAME_TYPES.length - 1 ? 'col-span-2 sm:col-span-1' : ''
+                className={`rounded-2xl border-2 p-2.5 sm:p-3 flex flex-col items-center justify-center text-center transition-all duration-150 motion-reduce:transition-none motion-reduce:scale-100 ${
+                  hasOddOrphanOnMobile ? 'col-span-2 sm:col-span-1' : ''
                 } ${
                   isWinnerLocked
                     ? 'bg-gradient-to-b from-amber-500/30 to-yellow-500/20 border-yellow-300 ring-4 ring-yellow-400/50 scale-105 shadow-2xl'
@@ -183,13 +187,13 @@ export const MinigameRouletteModal: React.FC<MinigameRouletteModalProps> = ({
                     : 'bg-slate-900/95 border-white/15 text-slate-300'
                 }`}
               >
-                <span className="text-3xl md:text-4xl mb-2" aria-hidden="true">
+                <span className="text-2xl sm:text-3xl mb-1.5" aria-hidden="true">
                   {meta.emoji}
                 </span>
                 <span className="text-xs font-extrabold text-yellow-300 uppercase tracking-wider">
                   {meta.category}
                 </span>
-                <span className="text-xs font-black text-white mt-1 leading-tight">
+                <span className="text-xs font-black text-white mt-0.5 leading-tight">
                   {meta.shortName}
                 </span>
               </div>

@@ -10,11 +10,7 @@ import { PeajeModal } from './PeajeModal';
 import { BonusStarsModal } from './BonusStarsModal';
 import { TargetRouletteModal } from '@/components/Common/TargetRouletteModal';
 import { ChaosEventModal } from '@/components/Common/ChaosEventModal';
-import { BlockSmashMinigame } from '@/components/Minigames/BlockSmashMinigame';
-import { QuickVoteMinigame } from '@/components/Minigames/QuickVoteMinigame';
-import { BlindTimerMinigame } from '@/components/Minigames/BlindTimerMinigame';
-import { PlanningPokerMinigame } from '@/components/Minigames/PlanningPokerMinigame';
-import { SimonPipelineMinigame } from '@/components/Minigames/SimonPipelineMinigame';
+import { ActiveMinigameRenderer } from '@/components/Minigames/ActiveMinigameRenderer';
 import { MinigameIntroModal } from '@/components/Minigames/MinigameIntroModal';
 import { MinigameRouletteModal } from '@/components/Minigames/MinigameRouletteModal';
 import { MinigamePickerModal } from '@/components/Minigames/MinigamePickerModal';
@@ -460,25 +456,7 @@ export const HostScreen: React.FC = () => {
       )}
 
       {/* Minigames Overlay */}
-      {gameState.phase === 'minigame' && gameState.minigame?.phase !== 'roulette' && (
-        <>
-          {gameState.minigame?.type === 'block_smash' && (
-            <BlockSmashMinigame isController={false} />
-          )}
-          {gameState.minigame?.type === 'quick_vote' && (
-            <QuickVoteMinigame isController={false} />
-          )}
-          {gameState.minigame?.type === 'blind_timer' && (
-            <BlindTimerMinigame isController={false} />
-          )}
-          {gameState.minigame?.type === 'planning_poker' && (
-            <PlanningPokerMinigame isController={false} />
-          )}
-          {gameState.minigame?.type === 'simon_pipeline' && (
-            <SimonPipelineMinigame isController={false} />
-          )}
-        </>
-      )}
+      <ActiveMinigameRenderer isController={false} />
 
       {/* Facilitator Minigame Picker */}
       <MinigamePickerModal
